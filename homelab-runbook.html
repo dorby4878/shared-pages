@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home Lab Runbook</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#F3F4F1;
+  --surface:#FFFFFF;
+  --surface-2:#E9ECE7;
+  --line:#D9DCD4;
+  --ink:#1B211D;
+  --ink-soft:#54605A;
+  --ink-faint:#838F88;
+  --accent:#C9622A;
+  --accent-ink:#FFFFFF;
+  --good:#2F6F62;
+  --good-bg:#E3EFEA;
+  --warn:#96701E;
+  --warn-bg:#F5EBD3;
+  --crit:#A5393A;
+  --crit-bg:#F5E1DF;
+  --focus:#2F6F62;
+  --shadow: 0 1px 2px rgba(27,33,29,0.06), 0 8px 20px -12px rgba(27,33,29,0.18);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14181A;
+    --surface:#1B2124;
+    --surface-2:#212A2C;
+    --line:#2B3436;
+    --ink:#E8EBE6;
+    --ink-soft:#AAB3AD;
+    --ink-faint:#71807A;
+    --accent:#E0824A;
+    --accent-ink:#191008;
+    --good:#54AC98;
+    --good-bg:#1B322C;
+    --warn:#D9A63E;
+    --warn-bg:#3A2F14;
+    --crit:#E1837F;
+    --crit-bg:#3A2020;
+    --focus:#54AC98;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14181A;
+  --surface:#1B2124;
+  --surface-2:#212A2C;
+  --line:#2B3436;
+  --ink:#E8EBE6;
+  --ink-soft:#AAB3AD;
+  --ink-faint:#71807A;
+  --accent:#E0824A;
+  --accent-ink:#191008;
+  --good:#54AC98;
+  --good-bg:#1B322C;
+  --warn:#D9A63E;
+  --warn-bg:#3A2F14;
+  --crit:#E1837F;
+  --crit-bg:#3A2020;
+  --focus:#54AC98;
+  --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+}
+
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--ink);
+  font-family:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.mono,.pill,.kbd,code,.label,.topo-node .ip,.topo-node .vmid,table,.qr-key,.qr-val,.meta,.scan-time{
+  font-family:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+h1,h2,h3{text-wrap:balance; margin:0;}
+a{color:var(--good);}
+::selection{background:var(--accent); color:var(--accent-ink);}
+:focus-visible{outline:2px solid var(--focus); outline-offset:2px;}
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; scroll-behavior:auto !important;}
+}
+
+.wrap{max-width:1040px; margin:0 auto; padding:0 24px 96px;}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:sticky; top:0; z-index:20;
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);
+}
+.topbar-inner{
+  max-width:1040px; margin:0 auto; padding:14px 24px;
+  display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+}
+.topbar-left{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
+.brand{display:flex; align-items:baseline; gap:10px;}
+.brand .mark{
+  width:10px; height:10px; border-radius:2px;
+  background:var(--accent); display:inline-block; flex:none;
+}
+.brand-name{font-weight:600; font-size:15px; letter-spacing:0.01em;}
+nav.jump{display:flex; gap:18px; flex-wrap:wrap;}
+nav.jump a{
+  font-size:12.5px; color:var(--ink-soft); text-decoration:none;
+  letter-spacing:0.03em; text-transform:uppercase;
+  border-bottom:1px solid transparent; padding-bottom:2px;
+}
+nav.jump a:hover{color:var(--ink); border-color:var(--line);}
+
+/* ---------- header ---------- */
+header.hero{padding:44px 0 28px;}
+.eyebrow{
+  font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+  color:var(--accent); font-weight:600; margin:0 0 10px;
+}
+h1.title{font-size:34px; font-weight:700; letter-spacing:-0.01em;}
+.hero-sub{color:var(--ink-soft); font-size:15.5px; margin-top:10px; max-width:62ch;}
+.scan-time{
+  display:inline-flex; align-items:center; gap:8px; margin-top:18px;
+  font-size:12.5px; color:var(--ink-faint); background:var(--surface-2);
+  border:1px solid var(--line); padding:6px 12px; border-radius:5px;
+}
+.dot{width:7px;height:7px;border-radius:50%; background:var(--good); flex:none;}
+
+/* ---------- topology ---------- */
+.topo{margin:32px 0 8px;}
+.topo-host{
+  border:1px solid var(--line); border-radius:10px; background:var(--surface);
+  box-shadow:var(--shadow); padding:20px 20px 22px;
+}
+.topo-host-head{display:flex; align-items:baseline; justify-content:space-between; flex-wrap:wrap; gap:8px; margin-bottom:16px;}
+.topo-host-head .name{font-size:15px; font-weight:600;}
+.topo-host-head .meta{color:var(--ink-faint); font-size:12.5px;}
+.topo-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(200px,1fr)); gap:14px;}
+.topo-node{
+  border:1px solid var(--line); border-radius:8px; background:var(--surface-2);
+  padding:14px 16px; position:relative;
+}
+.topo-node::before{
+  content:""; position:absolute; left:16px; top:-14px; width:1px; height:14px;
+  background:var(--line);
+}
+.topo-node .vmid{font-size:11px; color:var(--ink-faint);}
+.topo-node .name{font-weight:600; font-size:15px; margin:2px 0 6px;}
+.topo-node .role{color:var(--ink-soft); font-size:13px; margin-bottom:10px;}
+.topo-node .ip{font-size:12px; color:var(--ink-soft);}
+
+/* ---------- pills ---------- */
+.pill{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:11px; font-weight:600; letter-spacing:0.02em;
+  padding:3px 9px; border-radius:99px; text-transform:uppercase;
+}
+.pill.good{background:var(--good-bg); color:var(--good);}
+.pill.warn{background:var(--warn-bg); color:var(--warn);}
+.pill.crit{background:var(--crit-bg); color:var(--crit);}
+.pill .dot{width:6px;height:6px;}
+.pill.good .dot{background:var(--good);}
+.pill.warn .dot{background:var(--warn);}
+.pill.crit .dot{background:var(--crit);}
+
+/* ---------- sections / panels ---------- */
+section.host{margin-top:56px; scroll-margin-top:76px;}
+.panel{
+  border:1px solid var(--line); border-radius:10px; background:var(--surface);
+  box-shadow:var(--shadow); overflow:hidden;
+}
+.panel-head{
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  padding:18px 22px; border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg, var(--surface-2), var(--surface));
+}
+.panel-head-left{display:flex; align-items:center; gap:12px;}
+.panel-head h2{font-size:19px; font-weight:700;}
+.panel-head .sub{color:var(--ink-faint); font-size:12.5px; margin-top:2px;}
+.panel-body{padding:22px;}
+.panel-body > * + *{margin-top:26px;}
+
+h3.block-title{
+  font-size:11.5px; text-transform:uppercase; letter-spacing:0.07em;
+  color:var(--ink-faint); font-weight:600; margin-bottom:12px;
+}
+
+/* label/value grid */
+.kv{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:14px 22px;}
+.kv-item{display:flex; flex-direction:column; gap:3px;}
+.qr-key{font-size:11px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.05em;}
+.qr-val{font-size:14px; font-weight:500;}
+.qr-val.big{font-size:15px;}
+
+/* tables */
+.tbl-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:8px;}
+table{width:100%; border-collapse:collapse; font-size:12.8px; min-width:480px;}
+th{
+  text-align:left; font-weight:600; color:var(--ink-faint); font-size:11px;
+  letter-spacing:0.04em; text-transform:uppercase;
+  padding:9px 14px; background:var(--surface-2); border-bottom:1px solid var(--line);
+  white-space:nowrap;
+}
+td{padding:9px 14px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+td.dim{color:var(--ink-faint);}
+
+/* code / commands */
+.code{
+  background:var(--surface-2); border:1px solid var(--line); border-radius:7px;
+  padding:12px 14px; font-size:12.6px; overflow-x:auto; white-space:pre;
+  color:var(--ink);
+}
+
+/* callouts */
+.callout{
+  border:1px solid var(--line);
+  background:var(--surface-2); border-radius:8px;
+  padding:14px 16px; font-size:13.5px; color:var(--ink-soft);
+}
+.callout strong{color:var(--ink);}
+.callout.crit{border-color:color-mix(in srgb, var(--crit) 45%, var(--line));}
+.callout.good{border-color:color-mix(in srgb, var(--good) 45%, var(--line));}
+
+/* meter bar */
+.meter{height:8px; border-radius:99px; background:var(--surface-2); border:1px solid var(--line); overflow:hidden;}
+.meter > span{display:block; height:100%; background:var(--good); border-radius:99px 0 0 99px;}
+
+/* progress ledger for cleanup */
+.ledger{display:flex; flex-direction:column;}
+.ledger-row{
+  display:grid; grid-template-columns:22px 1fr auto; gap:14px; align-items:start;
+  padding:13px 0; border-bottom:1px solid var(--line);
+}
+.ledger-row:last-child{border-bottom:none;}
+.ledger-row .num{font-size:11px; color:var(--ink-faint); padding-top:2px;}
+.ledger-row .txt{font-size:13.6px; color:var(--ink-soft);}
+.ledger-row .txt strong{color:var(--ink); font-weight:600;}
+.ledger-row .txt code{font-size:12px; background:var(--surface-2); padding:1px 5px; border-radius:4px; border:1px solid var(--line);}
+
+/* quick reference footer */
+.qref-grid{display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:20px;}
+
+footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-faint); font-size:12px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;}
+
+.back-link{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:12.5px; color:var(--ink-soft); text-decoration:none;
+  border-bottom:1px solid transparent;
+}
+.back-link:hover, .back-link:focus-visible{color:var(--ink); border-color:var(--line);}
+@media print{
+  .topbar, .back-link{display:none;}
+  .panel, .topo-host{box-shadow:none;}
+  section.host{break-inside:avoid-page;}
+  a{color:var(--ink); text-decoration:underline;}
+}
+@media (max-width:640px){
+  h1.title{font-size:28px;}
+  .panel-head{align-items:flex-start;}
+}
+</style>
+
+</head>
+<body>
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-left">
+      <a class="back-link" href="index.html">&larr; Shared Pages</a>
+      <div class="brand"><span class="mark"></span><span class="brand-name">Home Lab Runbook</span></div>
+    </div>
+    <nav class="jump" aria-label="Section jump links">
+      <a href="#topology">Topology</a>
+      <a href="#host-pve01">pve01</a>
+      <a href="#host-agents">Agents</a>
+      <a href="#host-services">Services</a>
+      <a href="#host-pbs">PBS</a>
+      <a href="#backups">Backups</a>
+      <a href="#cleanup">Cleanup</a>
+      <a href="#reference">Reference</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <p class="eyebrow">Infrastructure reference &mdash; live-scanned</p>
+    <h1 class="title">One NUC, three VMs, and what's actually running on them</h1>
+    <p class="hero-sub">Physical layer, per-VM configuration, backup topology, and the open cleanup items &mdash; assembled by SSHing into every host rather than from notes.</p>
+    <div class="scan-time"><span class="dot"></span>Scanned 2026&#8209;09&#8209;05 &middot; 4 hosts online, 0 unreachable &middot; services section refreshed 2026&#8209;09&#8209;06</div>
+  </header>
+
+  <section id="topology" class="topo">
+    <div class="topo-host">
+      <div class="topo-host-head">
+        <div>
+          <span class="name">pve01</span>
+          <span class="pill good" style="margin-left:8px"><span class="dot"></span>up</span>
+        </div>
+        <div class="meta">Proxmox VE 9.2.2 &middot; ASUS NUC 15 Pro</div>
+      </div>
+      <div class="topo-grid">
+        <div class="topo-node">
+          <div class="vmid">VMID 100</div>
+          <div class="name">agents</div>
+          <div class="role">AI agents &middot; Docker</div>
+          <div class="ip">static LAN IP &middot; key-based SSH</div>
+        </div>
+        <div class="topo-node">
+          <div class="vmid">VMID 101</div>
+          <div class="name">services</div>
+          <div class="role">Self-hosted apps &middot; Docker</div>
+          <div class="ip">static LAN IP &middot; key-based SSH</div>
+        </div>
+        <div class="topo-node">
+          <div class="vmid">VMID 102</div>
+          <div class="name">pbs</div>
+          <div class="role">Proxmox Backup Server</div>
+          <div class="ip">static LAN IP &middot; key-based SSH</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PVE01 ============ -->
+  <section id="host-pve01" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left">
+          <div>
+            <h2>pve01 &mdash; the hypervisor</h2>
+            <div class="sub">Proxmox VE 9.2.2 &middot; kernel 7.0.2&#8209;6&#8209;pve</div>
+          </div>
+        </div>
+        <span class="pill warn"><span class="dot"></span>32G allocated / 30G physical</span>
+      </div>
+      <div class="panel-body">
+
+        <div>
+          <h3 class="block-title">Compute &amp; network</h3>
+          <div class="kv">
+            <div class="kv-item"><span class="qr-key">CPU</span><span class="qr-val">16 cores</span></div>
+            <div class="kv-item"><span class="qr-key">Memory (physical)</span><span class="qr-val">30 GiB, 21 GiB in use</span></div>
+            <div class="kv-item"><span class="qr-key">Memory (allocated to VMs)</span><span class="qr-val">32 GiB &mdash; 8+6+2 cores, 16+12+4 GiB</span></div>
+            <div class="kv-item"><span class="qr-key">Bridge</span><span class="qr-val">vmbr0 &middot; single /24 LAN, static addressing</span></div>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="block-title">Storage pools</h3>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Name</th><th>Type</th><th>Used</th><th>Available</th><th>Holds</th></tr></thead>
+              <tbody>
+                <tr><td>local</td><td class="dim">dir</td><td>9.1 GB</td><td>84.3 GB</td><td class="dim">ISOs, host backups dir</td></tr>
+                <tr><td>local&#8209;lvm</td><td class="dim">lvmthin</td><td>62.3 GB (7.5%)</td><td>770 GB</td><td class="dim">All three VM disks</td></tr>
+                <tr><td>homelab&#8209;pbs</td><td class="dim">pbs</td><td>6.3 GB (10.7%)</td><td>49.5 GB</td><td class="dim">VM backup snapshots</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="callout warn"><strong>32 GiB allocated across VMs vs. 30 GiB physical RAM.</strong> No memory pressure observed yet (ballooning / not all VMs peak simultaneously), but there's no headroom left for a fourth VM without either trimming an existing allocation or adding RAM.</div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ AGENTS ============ -->
+  <section id="host-agents" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left">
+          <div>
+            <h2>agents &mdash; VMID 100</h2>
+            <div class="sub">Ubuntu 24.04.4 LTS &middot; kernel 6.8.0&#8209;138&#8209;generic</div>
+          </div>
+        </div>
+        <span class="pill good"><span class="dot"></span>running &middot; 13h46m uptime</span>
+      </div>
+      <div class="panel-body">
+
+        <div class="kv">
+          <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">Dedicated AI-agent host &mdash; isolated Hermes containers</span></div>
+          <div class="kv-item"><span class="qr-key">Resources</span><span class="qr-val">8 cores &middot; 16 GiB RAM &middot; 200 GB disk (31 GB used)</span></div>
+          <div class="kv-item"><span class="qr-key">IaC repo</span><span class="qr-val">homelab&#8209;agents, branch <code>feature/whisper&#8209;ivrit&#8209;shared&#8209;service</code></span></div>
+        </div>
+
+        <div>
+          <h3 class="block-title">Containers</h3>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Container</th><th>Image</th><th>Status</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td>hermes&#8209;1</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td><span class="pill good"><span class="dot"></span>up 14h</span></td><td class="dim">Personal Hermes agent &middot; read&#8209;only shared data</td></tr>
+                <tr><td>hermes&#8209;2</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td><span class="pill good"><span class="dot"></span>up 14h</span></td><td class="dim">Personal Hermes agent &middot; read&#8209;only shared data</td></tr>
+                <tr><td>hermes&#8209;3</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td><span class="pill good"><span class="dot"></span>up 14h</span></td><td class="dim">Shared/household Hermes &middot; read&#8209;write shared data, own network</td></tr>
+                <tr><td>hermes&#8209;4</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td><span class="pill good"><span class="dot"></span>up 14h</span></td><td class="dim">Additional isolated Hermes agent</td></tr>
+                <tr><td>whisper&#8209;ivrit</td><td class="dim">build: ./whisper&#8209;ivrit&#8209;svc</td><td><span class="pill good"><span class="dot"></span>healthy</span></td><td class="dim">Shared Hebrew speech&#8209;to&#8209;text; network&#8209;reachable only from hermes&#8209;3</td></tr>
+                <tr><td>gallant_shaw</td><td class="dim">hello&#8209;world</td><td><span class="pill warn"><span class="dot"></span>exited 10d ago</span></td><td class="dim">Stale test container &mdash; cleanup candidate</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="block-title">Isolation &amp; data</h3>
+          <p style="font-size:13.5px; color:var(--ink-soft); max-width:70ch;">Each Hermes container gets its own mode&#8209;restricted bind mount at a <code>&lt;per-agent state path&gt;</code>, not readable by the host's own primary account, plus a read&#8209;only view of a <code>&lt;shared data path&gt;</code>. hermes&#8209;3 is the exception: it gets read&#8209;write access to the shared data and its own Docker network, which is also the only network whisper&#8209;ivrit joins &mdash; that's the deliberate seam that lets the household agent use shared STT without exposing it to the personal agents.</p>
+        </div>
+
+        <div class="callout"><strong>&lt;manual backup path&gt;</strong> holds two manual snapshots (5.3 GB, taken 2026&#8209;08&#8209;31) from before the sops secret&#8209;encryption changes. No timer or cron job produces new ones &mdash; this was a one&#8209;off precaution, now superseded by the nightly whole&#8209;VM PBS backup.</div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SERVICES ============ -->
+  <section id="host-services" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left">
+          <div>
+            <h2>services &mdash; VMID 101</h2>
+            <div class="sub">Ubuntu 24.04.4 LTS &middot; kernel 6.8.0&#8209;138&#8209;generic</div>
+          </div>
+        </div>
+        <span class="pill good"><span class="dot"></span>running &middot; 1d 2h uptime</span>
+      </div>
+      <div class="panel-body">
+
+        <div class="kv">
+          <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">General self&#8209;hosted apps behind Caddy, plus the public edge (Cloudflare Tunnel + Authentik)</span></div>
+          <div class="kv-item"><span class="qr-key">Resources</span><span class="qr-val">6 cores &middot; 12 GiB RAM &middot; 40+250 GB disk (20 GB used)</span></div>
+          <div class="kv-item"><span class="qr-key">IaC repo</span><span class="qr-val">homelab&#8209;stacks, <code>main</code> (PR #13 merged 2026&#8209;09&#8209;06)</span></div>
+        </div>
+
+        <div>
+          <h3 class="block-title">Containers</h3>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Container</th><th>Image</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr><td>caddy</td><td class="dim">caddy:2.11.4</td><td><span class="pill good"><span class="dot"></span>up 14m</span></td></tr>
+                <tr><td>cloudflared</td><td class="dim">cloudflare/cloudflared:2026.8.3</td><td><span class="pill good"><span class="dot"></span>up 13m</span></td></tr>
+                <tr><td>authentik&#8209;server&#8209;1</td><td class="dim">ghcr.io/goauthentik/server:2026.8.1</td><td><span class="pill good"><span class="dot"></span>healthy</span></td></tr>
+                <tr><td>authentik&#8209;worker&#8209;1</td><td class="dim">ghcr.io/goauthentik/server:2026.8.1</td><td><span class="pill good"><span class="dot"></span>healthy</span></td></tr>
+                <tr><td>authentik&#8209;postgresql&#8209;1</td><td class="dim">postgres:16&#8209;alpine</td><td><span class="pill good"><span class="dot"></span>healthy</span></td></tr>
+                <tr><td>now&#8209;web</td><td class="dim">now&#8209;app&#8209;now&#8209;web (nginx)</td><td><span class="pill good"><span class="dot"></span>up 17h</span></td></tr>
+                <tr><td>now&#8209;server</td><td class="dim">now&#8209;app&#8209;now&#8209;server (socket.io)</td><td><span class="pill good"><span class="dot"></span>up 17h</span></td></tr>
+                <tr><td>uptime&#8209;kuma</td><td class="dim">louislam/uptime&#8209;kuma:1</td><td><span class="pill good"><span class="dot"></span>healthy</span></td></tr>
+                <tr><td>komodo&#8209;core&#8209;1</td><td class="dim">ghcr.io/moghtech/komodo&#8209;core:2.3.2</td><td><span class="pill good"><span class="dot"></span>up 17h</span></td></tr>
+                <tr><td>komodo&#8209;periphery&#8209;1</td><td class="dim">ghcr.io/moghtech/komodo&#8209;periphery:2.3.2</td><td><span class="pill good"><span class="dot"></span>up 26h</span></td></tr>
+                <tr><td>komodo&#8209;mongo&#8209;1</td><td class="dim">mongo:7.0.40</td><td><span class="pill good"><span class="dot"></span>up 26h</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="block-title">Public edge &mdash; NOW app (updated 2026&#8209;09&#8209;06)</h3>
+          <p style="font-size:13.5px; color:var(--ink-soft); max-width:70ch; margin:0 0 14px;">NOW (Expo web + Socket.IO) is reachable from the internet via an outbound&#8209;only Cloudflare Tunnel &mdash; no router port&#8209;forward. <strong>Authentik was deliberately removed from this path</strong> (PR #13): NOW is a public end&#8209;user app, not internal management infra, so it follows <code>Internet &rarr; Cloudflare Tunnel &rarr; Caddy &rarr; NOW</code> with nothing in between. See homelab&#8209;stacks &rsaquo; docs/ARCHITECTURE.md and EDGE&#8209;AUTH&#8209;ROLLBACK.md for the identity&#8209;boundary rule and full history.</p>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Hostname</th><th>Reachable from</th><th>Upstream</th><th>Auth</th></tr></thead>
+              <tbody>
+                <tr><td>now.dorbenyehuda.com</td><td class="dim">anywhere (Cloudflare Tunnel)</td><td class="dim">now&#8209;web:80 / now&#8209;server:3333 (<code>/socket.io/*</code>)</td><td class="dim">none</td></tr>
+                <tr><td>&lt;NOW LAN hostname&gt;</td><td class="dim">LAN only</td><td class="dim">same as above, direct via Caddy</td><td class="dim">none</td></tr>
+                <tr><td>&lt;Authentik LAN hostname&gt;</td><td class="dim">LAN only</td><td class="dim">Authentik server</td><td class="dim">Authentik's own login</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout crit" style="margin-top:14px;"><strong>Known risk, accepted:</strong> NOW has no application&#8209;level authentication of its own yet &mdash; anyone with the URL can reach it. Tracked in docs/ROUTES.md until NOW ships its own signup/login.</div>
+        </div>
+
+        <div>
+          <h3 class="block-title">Internal management (Tailscale&#8209;only, bypasses Caddy)</h3>
+          <p style="font-size:13.5px; color:var(--ink-soft); max-width:70ch; margin:0 0 14px;">Komodo and Uptime Kuma are reached directly at Tailscale&#8209;IP:port with their own native logins &mdash; not through Caddy or Authentik. (Caddy can't restrict one site to a single host IP under normal Docker bridge networking; see docs/CADDY&#8209;PATTERNS.md.) Routing them through Caddy + Authentik, per the target architecture, is tracked as future work.</p>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Address</th><th>Service</th></tr></thead>
+              <tbody>
+                <tr><td>&lt;services Tailscale IP&gt;:9120</td><td class="dim">Komodo Core</td></tr>
+                <tr><td>&lt;services Tailscale IP&gt;:3001</td><td class="dim">Uptime Kuma</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="block-title">Scheduled &amp; firewall</h3>
+          <div class="kv">
+            <div class="kv-item"><span class="qr-key">homelab&#8209;healthcheck.timer</span><span class="qr-val">every ~15 min &middot; disk / containers / sites &middot; ntfy on change</span></div>
+            <div class="kv-item"><span class="qr-key">UFW default</span><span class="qr-val">deny incoming, LAN&#8209;only SSH; Cloudflare Tunnel is outbound&#8209;only, no inbound rule needed</span></div>
+            <div class="kv-item"><span class="qr-key">Caddy admin API</span><span class="qr-val"><code>admin off</code> &mdash; fully disabled, not just unbound</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PBS ============ -->
+  <section id="host-pbs" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left">
+          <div>
+            <h2>pbs &mdash; VMID 102</h2>
+            <div class="sub">Proxmox Backup Server 4.2.0&#8209;1</div>
+          </div>
+        </div>
+        <span class="pill good"><span class="dot"></span>running</span>
+      </div>
+      <div class="panel-body">
+
+        <div class="kv">
+          <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">Whole&#8209;VM backup target for agents + services</span></div>
+          <div class="kv-item"><span class="qr-key">Resources</span><span class="qr-val">2 cores &middot; 4 GiB RAM &middot; 32 GB OS disk</span></div>
+          <div class="kv-item"><span class="qr-key">Datastore disk</span><span class="qr-val">SanDisk USB, passed through, ext4, ~57 GB</span></div>
+        </div>
+
+        <div>
+          <h3 class="block-title">homelab-datastore usage</h3>
+          <div class="meter"><span style="width:12%"></span></div>
+          <div class="kv" style="margin-top:10px;">
+            <div class="kv-item"><span class="qr-key">Used</span><span class="qr-val">6.1 GB of 57 GB (12%)</span></div>
+            <div class="kv-item"><span class="qr-key">Dedup ratio (VM 101's first backup)</span><span class="qr-val">290 GB nominal &rarr; 6 GB real</span></div>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="block-title">Schedules</h3>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th>Job</th><th>When</th><th>Scope</th><th>Retention / threshold</th></tr></thead>
+              <tbody>
+                <tr><td>Backup (vzdump)</td><td class="dim">daily, 03:00</td><td class="dim">VM 100 + VM 101</td><td class="dim">7 daily / 4 weekly / 3 monthly</td></tr>
+                <tr><td>Garbage collection</td><td class="dim">weekly, Sun 04:00</td><td class="dim">homelab&#8209;datastore</td><td class="dim">reclaims chunks orphaned by pruning</td></tr>
+                <tr><td>Storage alert</td><td class="dim">daily, 06:00</td><td class="dim">homelab&#8209;datastore</td><td class="dim">ntfy at &ge;80% used</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="block-title">Access &amp; notifications</h3>
+          <div class="kv">
+            <div class="kv-item"><span class="qr-key">PBS users</span><span class="qr-val">default local superuser (admin) &middot; a dedicated API token scoped to DatastoreAdmin on homelab&#8209;datastore only, nothing broader</span></div>
+            <div class="kv-item"><span class="qr-key">PVE notification route</span><span class="qr-val">webhook <code>ntfy&#8209;homelab</code> + matcher <code>backup&#8209;to&#8209;ntfy</code> &rarr; ntfy, alongside built&#8209;in mail&#8209;to&#8209;root</span></div>
+          </div>
+        </div>
+
+        <div class="callout good"><strong>Verified end&#8209;to&#8209;end:</strong> a real 290 GB backup of VM 101 completed successfully, an incremental re&#8209;run finished in 11 seconds, and both the backup&#8209;result ntfy push and the storage&#8209;alert test push were confirmed delivered.</div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BACKUPS / DR ============ -->
+  <section id="backups" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left">
+          <div>
+            <h2>Backups &amp; disaster recovery</h2>
+            <div class="sub">Full runbook: homelab&#8209;stacks &rsaquo; docs/RESTORE.md</div>
+          </div>
+        </div>
+      </div>
+      <div class="panel-body">
+
+        <div>
+          <h3 class="block-title">Restore, fastest to slowest</h3>
+          <div class="ledger">
+            <div class="ledger-row"><div class="num">01</div><div class="txt"><strong>PVE web UI</strong> &middot; select the VM &rarr; Backup tab &rarr; pick a snapshot &rarr; Restore (in place or to a new VMID).</div><div></div></div>
+            <div class="ledger-row"><div class="num">02</div><div class="txt"><strong>PBS web UI</strong> (PBS host, port 8007) &middot; browse snapshot contents or restore individual files without touching the whole VM.</div><div></div></div>
+            <div class="ledger-row"><div class="num">03</div><div class="txt"><strong>CLI</strong> on the Proxmox host &middot; <code>pvesm list homelab-pbs --vmid 101</code> then <code>qmrestore &lt;volid&gt; 101</code>.</div><div></div></div>
+            <div class="ledger-row"><div class="num">04</div><div class="txt"><strong>Full NUC loss</strong> &middot; only recoverable if the USB datastore drive survived &mdash; see the caveat below and the full runbook for rebuild steps.</div><div></div></div>
+          </div>
+        </div>
+
+        <div class="callout crit"><strong>The datastore is one USB drive in the same box it protects.</strong> That covers accidental deletion, bad deploys, and Proxmox&#8209;level mistakes &mdash; it does not cover the NUC itself dying, being stolen, or burning down. Real disaster recovery means periodically rotating the drive off&#8209;site; without that habit, this is backup, not DR.</div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CLEANUP ============ -->
+  <section id="cleanup" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left">
+          <div>
+            <h2>Open items</h2>
+            <div class="sub">Nothing urgent &mdash; noted while scanning</div>
+          </div>
+        </div>
+      </div>
+      <div class="panel-body">
+        <div class="ledger">
+          <div class="ledger-row"><div class="num">01</div><div class="txt"><strong>Uptime Kuma unclaimed</strong> &middot; the internal monitoring endpoint has no admin account yet and no monitors configured.</div><div></div></div>
+          <div class="ledger-row"><div class="num">02</div><div class="txt"><strong>Dead UFW rules on services</strong> &middot; two rules still allow port 19999 (Netdata), which was removed. Harmless, just stale.</div><div></div></div>
+          <div class="ledger-row"><div class="num">03</div><div class="txt"><strong>Orphaned secrets on services</strong> &middot; leftover credential files for two decommissioned services (an old backup tool and a DNS service) that were never cleaned up.</div><div></div></div>
+          <div class="ledger-row"><div class="num">04</div><div class="txt"><strong>Old restic repo still on disk</strong> &middot; a retired backup repository directory on services, kept as a fallback until PBS is fully trusted.</div><div></div></div>
+          <div class="ledger-row"><div class="num">05</div><div class="txt"><strong>Resolved</strong> &middot; homelab&#8209;stacks PR #4 (backup notifications + storage alert) merged.</div><div></div></div>
+          <div class="ledger-row"><div class="num">06</div><div class="txt"><strong>Stale container on agents</strong> &middot; <code>gallant_shaw</code> (hello&#8209;world), exited 10 days ago.</div><div></div></div>
+          <div class="ledger-row"><div class="num">07</div><div class="txt"><strong>32 GiB allocated vs. 30 GiB physical RAM</strong> on pve01 &mdash; no headroom for another VM as&#8209;is.</div><div></div></div>
+          <div class="ledger-row"><div class="num">08</div><div class="txt"><strong>No storage&#8209;growth projection yet</strong> for homelab&#8209;datastore &mdash; needs 1&ndash;2 weeks of real data before extrapolating a fill&#8209;up date.</div><div></div></div>
+          <div class="ledger-row"><div class="num">09</div><div class="txt"><strong>NOW has no application&#8209;level auth</strong> &middot; public and open to anyone with the URL since PR #13 removed Authentik from its path. Accepted risk until NOW ships its own signup/login.</div><div></div></div>
+          <div class="ledger-row"><div class="num">10</div><div class="txt"><strong>Komodo/Uptime Kuma not yet behind Authentik</strong> &middot; still Tailscale&#8209;IP:port direct, per the target architecture in docs/ARCHITECTURE.md. Tracked as future work.</div><div></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ REFERENCE ============ -->
+  <section id="reference" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><h2>Quick reference</h2></div>
+      </div>
+      <div class="panel-body">
+        <div class="qref-grid">
+          <div>
+            <h3 class="block-title">SSH</h3>
+            <div class="code">Hypervisor    static LAN IP, key auth
+Agents VM     static LAN IP, key auth
+Services VM   static LAN IP, key auth
+PBS VM        static LAN IP, key auth</div>
+          </div>
+          <div>
+            <h3 class="block-title">Web UIs</h3>
+            <div class="code">Proxmox VE   https://&lt;proxmox host&gt;:8006
+PBS          https://&lt;pbs host&gt;:8007
+Komodo       &lt;services Tailscale IP&gt;:9120 (Tailscale)
+Uptime Kuma  &lt;services Tailscale IP&gt;:3001 (Tailscale)
+NOW (public) now.dorbenyehuda.com
+NOW (LAN)    &lt;NOW LAN hostname&gt;
+Authentik    &lt;Authentik LAN hostname&gt; (LAN only)</div>
+          </div>
+          <div>
+            <h3 class="block-title">IaC repos</h3>
+            <div class="code">homelab-agents   &#8594; VMID 100
+homelab-stacks   &#8594; VMID 101</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Home Lab Runbook &middot; assembled by live SSH scan, not from memory</span>
+    <span>pve01 &middot; agents &middot; services &middot; pbs</span>
+  </footer>
+
+</div>
+</body>
+</html>

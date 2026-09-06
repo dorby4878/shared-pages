@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Services VM Runbook</title>
+<meta name="description" content="Technical runbook for the Services VM: current edge/auth architecture, deployment procedure, monitoring, backup, and the new-application checklist, with current state and proposed work clearly separated.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#F3F4F1;
+  --surface:#FFFFFF;
+  --surface-2:#E9ECE7;
+  --line:#D9DCD4;
+  --ink:#1B211D;
+  --ink-soft:#54605A;
+  --ink-faint:#838F88;
+  --accent:#C9622A;
+  --accent-ink:#FFFFFF;
+  --good:#2F6F62;
+  --good-bg:#E3EFEA;
+  --warn:#96701E;
+  --warn-bg:#F5EBD3;
+  --crit:#A5393A;
+  --crit-bg:#F5E1DF;
+  --focus:#2F6F62;
+  --shadow: 0 1px 2px rgba(27,33,29,0.06), 0 8px 20px -12px rgba(27,33,29,0.18);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14181A; --surface:#1B2124; --surface-2:#212A2C; --line:#2B3436;
+    --ink:#E8EBE6; --ink-soft:#AAB3AD; --ink-faint:#71807A;
+    --accent:#E0824A; --accent-ink:#191008;
+    --good:#54AC98; --good-bg:#1B322C;
+    --warn:#D9A63E; --warn-bg:#3A2F14;
+    --crit:#E1837F; --crit-bg:#3A2020;
+    --focus:#54AC98;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14181A; --surface:#1B2124; --surface-2:#212A2C; --line:#2B3436;
+  --ink:#E8EBE6; --ink-soft:#AAB3AD; --ink-faint:#71807A;
+  --accent:#E0824A; --accent-ink:#191008;
+  --good:#54AC98; --good-bg:#1B322C;
+  --warn:#D9A63E; --warn-bg:#3A2F14;
+  --crit:#E1837F; --crit-bg:#3A2020;
+  --focus:#54AC98;
+  --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+}
+
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.mono,.pill,code,.qr-key,.qr-val,table,.meta,.scan-time{
+  font-family:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+h1,h2,h3{text-wrap:balance; margin:0;}
+a{color:var(--good);}
+::selection{background:var(--accent); color:var(--accent-ink);}
+:focus-visible{outline:2px solid var(--focus); outline-offset:2px;}
+@media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; scroll-behavior:auto !important;} }
+
+.skip-link{
+  position:absolute; left:-999px; top:auto;
+  background:var(--surface); color:var(--ink); padding:10px 16px;
+  border:1px solid var(--line); border-radius:6px; z-index:100;
+}
+.skip-link:focus{ left:16px; top:16px; }
+
+.wrap{max-width:1080px; margin:0 auto; padding:0 24px 96px;}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:sticky; top:0; z-index:20;
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);
+}
+.topbar-inner{
+  max-width:1080px; margin:0 auto; padding:14px 24px;
+  display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+}
+.topbar-left{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
+.brand{display:flex; align-items:baseline; gap:10px;}
+.brand .mark{width:10px; height:10px; border-radius:2px; background:var(--accent); display:inline-block; flex:none;}
+.brand-name{font-weight:600; font-size:15px; letter-spacing:0.01em;}
+.back-link{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:12.5px; color:var(--ink-soft); text-decoration:none;
+  border-bottom:1px solid transparent;
+}
+.back-link:hover, .back-link:focus-visible{color:var(--ink); border-color:var(--line);}
+nav.jump{display:flex; gap:16px; flex-wrap:wrap;}
+nav.jump a{
+  font-size:12px; color:var(--ink-soft); text-decoration:none;
+  letter-spacing:0.03em; text-transform:uppercase;
+  border-bottom:1px solid transparent; padding-bottom:2px;
+}
+nav.jump a:hover, nav.jump a:focus-visible{color:var(--ink); border-color:var(--line);}
+
+/* ---------- header ---------- */
+header.hero{padding:44px 0 20px;}
+.eyebrow{font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); font-weight:600; margin:0 0 10px;}
+h1.title{font-size:32px; font-weight:700; letter-spacing:-0.01em;}
+.hero-sub{color:var(--ink-soft); font-size:15.5px; margin-top:10px; max-width:70ch;}
+.scan-time{
+  display:inline-flex; align-items:flex-start; gap:8px; margin-top:18px;
+  font-size:12.5px; color:var(--ink-faint); background:var(--surface-2);
+  border:1px solid var(--line); padding:10px 14px; border-radius:5px; max-width:70ch;
+}
+.dot{width:7px;height:7px;border-radius:50%; background:var(--good); flex:none; margin-top:5px;}
+
+/* ---------- legend ---------- */
+.legend{
+  display:flex; gap:20px; flex-wrap:wrap; align-items:center;
+  margin:24px 0 8px; padding:14px 18px; border:1px solid var(--line); border-radius:8px; background:var(--surface);
+}
+.legend-item{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--ink-soft);}
+
+/* ---------- pills ---------- */
+.pill{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:10.5px; font-weight:600; letter-spacing:0.03em;
+  padding:3px 9px; border-radius:99px; text-transform:uppercase; white-space:nowrap;
+}
+.pill.good{background:var(--good-bg); color:var(--good);}
+.pill.warn{background:var(--warn-bg); color:var(--warn);}
+.pill.crit{background:var(--crit-bg); color:var(--crit);}
+.pill.planned{background:transparent; border:1px dashed var(--ink-faint); color:var(--ink-faint);}
+.pill .dot{width:6px;height:6px; margin-top:0;}
+.pill.good .dot{background:var(--good);}
+.pill.warn .dot{background:var(--warn);}
+.pill.crit .dot{background:var(--crit);}
+
+/* ---------- sections / panels ---------- */
+section.host{margin-top:52px; scroll-margin-top:80px;}
+.panel{border:1px solid var(--line); border-radius:10px; background:var(--surface); box-shadow:var(--shadow); overflow:hidden;}
+.panel-head{
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  padding:18px 22px; border-bottom:1px solid var(--line); background:var(--surface-2);
+}
+.panel-head-left{display:flex; align-items:center; gap:12px;}
+.panel-head h2{font-size:18px; font-weight:700;}
+.panel-head .sub{color:var(--ink-faint); font-size:12.5px; margin-top:2px;}
+.panel-body{padding:22px;}
+.panel-body > * + *{margin-top:24px;}
+
+h3.block-title{
+  font-size:11.5px; text-transform:uppercase; letter-spacing:0.07em;
+  color:var(--ink-faint); font-weight:600; margin-bottom:12px;
+}
+p.lead{font-size:13.8px; color:var(--ink-soft); max-width:74ch; margin:0;}
+p.lead strong{color:var(--ink);}
+
+/* label/value grid */
+.kv{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:14px 22px;}
+.kv-item{display:flex; flex-direction:column; gap:3px;}
+.qr-key{font-size:11px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.05em;}
+.qr-val{font-size:14px; font-weight:500;}
+
+/* tables */
+.tbl-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:8px;}
+table{width:100%; border-collapse:collapse; font-size:12.6px; min-width:480px;}
+th{
+  text-align:left; font-weight:600; color:var(--ink-faint); font-size:11px;
+  letter-spacing:0.04em; text-transform:uppercase;
+  padding:9px 14px; background:var(--surface-2); border-bottom:1px solid var(--line);
+  white-space:nowrap;
+}
+td{padding:9px 14px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+td.dim{color:var(--ink-soft);}
+
+/* code / commands */
+.code{
+  background:var(--surface-2); border:1px solid var(--line); border-radius:7px;
+  padding:12px 14px; font-size:12.4px; overflow-x:auto; white-space:pre;
+  color:var(--ink); font-family:"IBM Plex Mono", ui-monospace, monospace;
+}
+.code .c{color:var(--ink-faint);}
+figure.snippet{margin:0;}
+figure.snippet figcaption{font-size:11.5px; color:var(--ink-faint); margin-bottom:6px;}
+
+/* callouts - used sparingly, only for genuine risk/operational hazards */
+.callout{
+  border:1px solid var(--line);
+  background:var(--surface-2); border-radius:8px;
+  padding:14px 16px; font-size:13.3px; color:var(--ink-soft);
+}
+.callout strong{color:var(--ink);}
+.callout.crit{border-color:color-mix(in srgb, var(--crit) 45%, var(--line));}
+.callout.warn{border-color:color-mix(in srgb, var(--warn) 45%, var(--line));}
+.callout.good{border-color:color-mix(in srgb, var(--good) 45%, var(--line));}
+
+/* ordered checklist / numbered steps */
+.steps{display:flex; flex-direction:column;}
+.step{
+  display:grid; grid-template-columns:26px 1fr; gap:14px; align-items:start;
+  padding:13px 0; border-bottom:1px solid var(--line);
+}
+.step:last-child{border-bottom:none;}
+.step .num{font-size:11px; color:var(--ink-faint); padding-top:2px;}
+.step .txt{font-size:13.6px; color:var(--ink-soft);}
+.step .txt strong{color:var(--ink); font-weight:600;}
+.step .txt code{font-size:12px; background:var(--surface-2); padding:1px 5px; border-radius:4px; border:1px solid var(--line);}
+
+/* ---------- trust/network diagram ---------- */
+.diagram{margin:0;}
+.diagram figcaption{font-size:11.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-faint); font-weight:600; margin-bottom:14px;}
+.flow{display:flex; align-items:stretch; gap:8px; flex-wrap:wrap;}
+.flow-node{
+  border:1px solid var(--line); border-radius:8px; background:var(--surface-2);
+  padding:10px 14px; font-size:12.5px; color:var(--ink); min-width:120px;
+  display:flex; flex-direction:column; justify-content:center; gap:2px;
+}
+.flow-node.accent{border-color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, var(--surface-2));}
+.flow-node.dim{color:var(--ink-soft);}
+.flow-sub{font-size:11px; color:var(--ink-faint); font-family:"IBM Plex Sans", sans-serif;}
+.flow-arrow{align-self:center; color:var(--ink-faint); font-size:16px; flex:none;}
+ol.flow-desc{
+  margin:16px 0 0; padding-left:20px; font-size:12.8px; color:var(--ink-soft);
+  display:flex; flex-direction:column; gap:4px;
+}
+ol.flow-desc li strong{color:var(--ink);}
+.diagram-note{font-size:12.8px; color:var(--ink-faint); max-width:74ch; margin-top:22px; padding-top:18px; border-top:1px solid var(--line);}
+.diagram-sep{margin:26px 0; border:none; border-top:1px solid var(--line);}
+
+footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-faint); font-size:12px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;}
+
+@media print{
+  .topbar{position:static; backdrop-filter:none;}
+  .skip-link{display:none;}
+  .panel{box-shadow:none; break-inside:avoid;}
+  section.host{break-inside:avoid-page;}
+}
+@media (max-width:640px){
+  h1.title{font-size:26px;}
+  .panel-head{flex-direction:column; align-items:flex-start;}
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-left">
+      <a class="back-link" href="index.html">&larr; Shared Pages</a>
+      <div class="brand"><span class="mark" aria-hidden="true"></span><span class="brand-name">Services VM Runbook</span></div>
+    </div>
+    <nav class="jump" aria-label="Section jump links">
+      <a href="#overview">Overview</a>
+      <a href="#stack">Stack</a>
+      <a href="#diagram">Trust map</a>
+      <a href="#now-path">NOW path</a>
+      <a href="#auth-boundary">Auth boundary</a>
+      <a href="#new-app">New app</a>
+      <a href="#deployment">Deployment</a>
+      <a href="#releases">Releases</a>
+      <a href="#operations">Operations</a>
+      <a href="#backup">Backup</a>
+      <a href="#failure-modes">Failure modes</a>
+      <a href="#verification">Verification</a>
+      <a href="#reference">Reference</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap" id="main">
+
+  <header class="hero">
+    <p class="eyebrow">Services VM &middot; VMID 101 &middot; technical runbook</p>
+    <h1 class="title">Everything the Services VM runs, and where it's headed</h1>
+    <p class="hero-sub">Edge, reverse proxy, identity, and admin access for the home lab's public-facing and internally-managed applications. Current behavior and proposed-but-not-built work are labeled separately throughout &mdash; nothing here should be read as implemented unless it's marked <strong>current</strong>.</p>
+    <div class="scan-time">
+      <span class="dot" aria-hidden="true"></span>
+      <span><strong>Source of truth / last verified:</strong> generated from the <code>homelab-stacks</code> infrastructure-as-code repository snapshot dated 2026&#8209;09&#8209;06 (compose files and <code>docs/</code>). It can drift from what's actually running on the live VM &mdash; treat conflicts in favor of re-checking the repo and the VM itself, not this page.</span>
+    </div>
+  </header>
+
+  <div class="legend" role="note" aria-label="Status label legend">
+    <div class="legend-item"><span class="pill good"><span class="dot"></span>current</span> deployed and running today</div>
+    <div class="legend-item"><span class="pill planned">planned</span> designed, not yet built &mdash; do not treat as implemented</div>
+    <div class="legend-item"><span class="pill crit"><span class="dot"></span>accepted risk</span> known gap, deliberately deferred</div>
+  </div>
+
+  <!-- ============ OVERVIEW ============ -->
+  <section id="overview" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left">
+          <div><h2>VM overview</h2><div class="sub">Ubuntu 24.04 &middot; VMID 101</div></div>
+        </div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <div class="kv">
+          <div class="kv-item"><span class="qr-key">Guest OS</span><span class="qr-val">Ubuntu 24.04 LTS</span></div>
+          <div class="kv-item"><span class="qr-key">VMID</span><span class="qr-val">101</span></div>
+          <div class="kv-item"><span class="qr-key">CPU</span><span class="qr-val">6 cores</span></div>
+          <div class="kv-item"><span class="qr-key">Memory</span><span class="qr-val">12 GiB RAM</span></div>
+          <div class="kv-item"><span class="qr-key">Disk</span><span class="qr-val">40 GB OS + 250 GB data</span></div>
+          <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">General self-hosted apps behind Caddy, plus the public edge (Cloudflare Tunnel + Authentik)</span></div>
+        </div>
+        <p class="lead">The <code>homelab-stacks</code> repository is the infrastructure-as-code source of truth for this VM: compose files, Caddy/cloudflared/Authentik configuration, and the docs this page is built from. <strong>Every stack must remain deployable with plain <code>docker compose</code> over SSH.</strong> Komodo (below) is a convenience layer for visibility and orchestration on top of that &mdash; it is never the source of truth, and nothing here is allowed to depend on Komodo being available.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ STACK ============ -->
+  <section id="stack" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Current stack inventory</h2><div class="sub">What's actually deployed, per the compose files</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th scope="col">Container(s)</th><th scope="col">Image</th><th scope="col">Purpose</th></tr></thead>
+            <tbody>
+              <tr><td>caddy</td><td class="dim">caddy:2.11.4</td><td class="dim">Reverse proxy &mdash; the only path from the tunnel to any app; also fronts LAN sites</td></tr>
+              <tr><td>cloudflared</td><td class="dim">cloudflare/cloudflared:2026.8.3</td><td class="dim">Outbound-only Cloudflare Tunnel &mdash; no inbound router port</td></tr>
+              <tr><td>authentik-server, authentik-worker</td><td class="dim">ghcr.io/goauthentik/server:2026.8.1</td><td class="dim">Trusted-user auth (forward-auth) for internal/management apps</td></tr>
+              <tr><td>authentik-postgresql</td><td class="dim">postgres:16-alpine</td><td class="dim">Authentik's database &mdash; internal network only, never published</td></tr>
+              <tr><td>komodo-core</td><td class="dim">ghcr.io/moghtech/komodo-core:2.3.2</td><td class="dim">Orchestration/visibility UI &mdash; Tailscale-only</td></tr>
+              <tr><td>komodo-periphery</td><td class="dim">ghcr.io/moghtech/komodo-periphery:2.3.2</td><td class="dim">Agent that lets Core manage this host &mdash; not published at all</td></tr>
+              <tr><td>komodo-mongo</td><td class="dim">mongo:7.0.40</td><td class="dim">Komodo's database &mdash; not published, no host port</td></tr>
+              <tr><td>uptime-kuma</td><td class="dim">louislam/uptime-kuma:1</td><td class="dim">Uptime/status monitoring &mdash; Tailscale-only</td></tr>
+              <tr><td>now-web, now-server</td><td class="dim">built from the NOW app repo (nginx static + Socket.IO)</td><td class="dim">Public end-user application</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="lead">Persistent state lives conceptually under <code>/srv</code> on the VM: per-app data under a data directory, per-app secrets kept outside Git, and Komodo-managed stack checkouts under a dedicated stacks directory that Periphery is scoped to. Docker named volumes (Mongo data, Caddy's data/config, Uptime Kuma's data) sit alongside this. None of that layout is disclosed here beyond the general shape &mdash; specific key material and credential file locations are intentionally omitted from this public page.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ TRUST / NETWORK DIAGRAM ============ -->
+  <section id="diagram" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Trust &amp; network boundaries</h2><div class="sub">Three paths, and the boundaries between them</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+
+        <figure class="diagram">
+          <figcaption>Public application traffic (live example: NOW)</figcaption>
+          <div class="flow" role="group" aria-hidden="true">
+            <div class="flow-node">Internet</div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node">Cloudflare<br><span class="flow-sub">DNS / WAF</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node">Tunnel<br><span class="flow-sub">cloudflared, outbound-only</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node accent">Caddy<br><span class="flow-sub">only entry point</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node">Per-app network<br><span class="flow-sub">e.g. now-web / now-server</span></div>
+          </div>
+          <ol class="flow-desc">
+            <li>Internet</li>
+            <li>Cloudflare DNS / WAF</li>
+            <li>Cloudflare Tunnel (<code>cloudflared</code>) &mdash; outbound-only connection, no inbound port opened on the router</li>
+            <li><strong>Caddy</strong> &mdash; the only entry point from the tunnel to any application</li>
+            <li>The application's own dedicated Docker network, shared only with Caddy (no host port published)</li>
+          </ol>
+        </figure>
+
+        <hr class="diagram-sep">
+
+        <figure class="diagram">
+          <figcaption>Trusted internal application pattern (Authentik-fronted)</figcaption>
+          <div class="flow" role="group" aria-hidden="true">
+            <div class="flow-node">Caddy</div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node">auth network<br><span class="flow-sub">Caddy + Authentik server only</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node dim">authentik-internal network<br><span class="flow-sub">worker + postgres, no other members</span></div>
+          </div>
+          <ol class="flow-desc">
+            <li>Caddy performs forward-auth against the Authentik server before proxying to a protected app</li>
+            <li>The <code>auth</code> network carries only Caddy &harr; Authentik server traffic</li>
+            <li>Authentik's worker and Postgres sit on a separate <code>authentik-internal</code> network with no other members &mdash; Caddy cannot reach the database directly</li>
+          </ol>
+        </figure>
+
+        <hr class="diagram-sep">
+
+        <figure class="diagram">
+          <figcaption>Tailscale-only administration (Komodo, Uptime Kuma, SSH)</figcaption>
+          <div class="flow" role="group" aria-hidden="true">
+            <div class="flow-node">Trusted device</div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node">Tailscale<br><span class="flow-sub">WireGuard tunnel</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node accent">Komodo / Uptime Kuma / SSH<br><span class="flow-sub">bound to the Tailscale IP, own native login</span></div>
+          </div>
+          <ol class="flow-desc">
+            <li>A device on the tailnet connects over Tailscale (WireGuard)</li>
+            <li>Traffic lands directly on the admin tool's own port, bound to the Tailscale interface IP &mdash; <strong>no Caddy, no Authentik in this path</strong></li>
+            <li>Each tool authenticates the user itself (Komodo's login, Uptime Kuma's login)</li>
+          </ol>
+        </figure>
+
+        <p class="diagram-note">These paths never cross: <code>cloudflared</code> cannot reach Komodo, Mongo, or any database directly, and nothing admin-facing is routed through the tunnel. This network model (dedicated per-app networks, Caddy joining each directly) applies to apps built under this design; the pre-existing Caddy, Komodo, and monitoring stacks predate it and were not migrated &mdash; that's why Komodo and Uptime Kuma still publish straight to the Tailscale IP instead of sitting behind a Caddy-fronted network of their own.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ NOW PATH ============ -->
+  <section id="now-path" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>NOW &mdash; current public path</h2><div class="sub">Expo web front-end + Socket.IO server</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <p class="lead">NOW is reachable from the internet through an outbound-only Cloudflare Tunnel, with Caddy as the only thing between the tunnel and the application. There is deliberately <strong>no Authentik and no router port-forward</strong> anywhere in this path:</p>
+        <div class="code">Internet
+  -&gt; Cloudflare DNS/WAF
+  -&gt; Cloudflare Tunnel (outbound-only, no inbound port)
+  -&gt; Caddy
+       route /socket.io/* -&gt; now-server
+       everything else    -&gt; now-web
+</div>
+        <p class="lead" style="margin-top:16px;">Authentik protects trusted internal/management applications &mdash; it is not part of NOW's identity model and was deliberately removed from this route. NOW is a public end-user application; if it ever has its own authentication, that's independent of Authentik entirely.</p>
+        <div class="callout crit">
+          <strong>Accepted risk, current:</strong> NOW has no application-level authentication of its own. Anyone with the URL can reach it &mdash; there is no login, signup, or session boundary at all today. This is a deliberate, temporary tradeoff made when Authentik was removed from the route, not an oversight, and it stays in place until NOW implements its own user accounts.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ AUTH BOUNDARY ============ -->
+  <section id="auth-boundary" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Authentik's boundary</h2><div class="sub">What it protects, and what it deliberately does not</div></div></div>
+      </div>
+      <div class="panel-body">
+        <p class="lead"><strong>Authentik protects trusted internal and management applications. It does not, and will not, manage end-user identity for public applications like NOW.</strong> Those are two separate identity domains by design: Authentik groups (admins, trusted users, household members) are never substituted for an application's own user roles.</p>
+
+        <div>
+          <h3 class="block-title">Admin tools today <span class="pill good" style="margin-left:6px;"><span class="dot"></span>current</span></h3>
+          <p class="lead">Komodo and Uptime Kuma are reached directly at a Tailscale IP and port, authenticating with their own native logins &mdash; not through Caddy, and not through Authentik.</p>
+        </div>
+
+        <div>
+          <h3 class="block-title">Caddy + Authentik in front of admin tools <span class="pill planned" style="margin-left:6px;">planned &mdash; not implemented</span></h3>
+          <p class="lead">Routing Komodo and Uptime Kuma through Caddy with Authentik forward-auth, matching the target architecture, is <strong>proposed only</strong>. It is not deployed. The original attempt hit a real limitation: Caddy cannot selectively restrict one of its sites to a single host IP under normal Docker bridge networking &mdash; host-IP-specific port publishing rewrites the destination to the container's internal address before Caddy ever sees which interface a connection arrived on, so a per-site <code>bind</code> directive can't tell "arrived via the Tailscale IP" from "arrived via the LAN IP." It briefly crash-looped Caddy in testing (<code>bind: cannot assign requested address</code>) before being reverted. If this is ever revisited, the two options on the table are <code>network_mode: host</code> for Caddy (which would give up the dedicated edge/auth/per-app network isolation model above) or a second, separate Caddy instance published only on the Tailscale IP. Neither has been judged worth it yet for two admin tools that already have their own login &mdash; direct IP:port access is simpler and just as private on a Tailscale-only path.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ NEW APP CHECKLIST ============ -->
+  <section id="new-app" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Checklist: adding a new application</h2><div class="sub">Operational steps derived from the established patterns above</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="steps">
+          <div class="step"><div class="num">01</div><div class="txt"><strong>Repo layout</strong> &mdash; give it its own directory (an application stack alongside the other per-service directories in the IaC repo), not a subfolder of an unrelated stack.</div></div>
+          <div class="step"><div class="num">02</div><div class="txt"><strong>Compose file</strong> &mdash; must run standalone with plain <code>docker compose up -d</code> over SSH. Never make it depend on Komodo to function.</div></div>
+          <div class="step"><div class="num">03</div><div class="txt"><strong>Pin images, don't float</strong> &mdash; use a full version or immutable digest for new applications (<code>caddy:2.11.4</code>, not <code>:latest</code>). The current repository is mostly versioned but varies in tag precision, so tighten new stacks rather than copying a broad major-only tag. If building locally, pin the base image too.</div></div>
+          <div class="step"><div class="num">04</div><div class="txt"><strong>Secret template first</strong> &mdash; ship an <code>.env.example</code> with variable names only, never real values. The real file stays local to the VM, outside Git, under a per-app secrets path. Anything that must be committed encrypted (as Komodo's database credentials are) goes through sops + age, decrypted only transiently at deploy time and never written to persistent disk in plaintext.</div></div>
+          <div class="step"><div class="num">05</div><div class="txt"><strong>Persistent data placement</strong> &mdash; bind-mount application state under the per-app data path convention (as Authentik's Postgres does), or use a named Docker volume if the data doesn't need host-level visibility.</div></div>
+          <div class="step"><div class="num">06</div><div class="txt"><strong>Healthcheck</strong> &mdash; define one if the upstream image supports it (Authentik's Postgres uses <code>pg_isready</code>). Not every current stack has one; treat it as the standard to write new stacks against, not a universal fact about what's deployed today.</div></div>
+          <div class="step"><div class="num">07</div><div class="txt"><strong>Dedicated network</strong> &mdash; give the app its own Docker network shared only with Caddy, following the edge/auth/per-app model, rather than joining a shared default network.</div></div>
+          <div class="step"><div class="num">08</div><div class="txt"><strong>No host ports by default</strong> &mdash; only publish a host port if there's a specific reason (the Tailscale-only admin-tool pattern is the accepted exception). Everything else should be reachable only via its dedicated network, through Caddy.</div></div>
+          <div class="step"><div class="num">09</div><div class="txt"><strong>Caddy only if the app needs to be reached through the edge</strong> &mdash; pick one of the three patterns: Authentik forward-auth for a trusted internal tool without its own login, no forward-auth for a public app with native end-user auth, or no Caddy at all for a Tailscale-only admin tool.</div></div>
+          <div class="step"><div class="num">10</div><div class="txt"><strong>Decide the route/domain up front</strong> &mdash; public (needs a real hostname and a Cloudflare Tunnel ingress rule), LAN-only internal hostname, or Tailscale-only IP:port. This decision drives which Caddy pattern applies.</div></div>
+          <div class="step"><div class="num">11</div><div class="txt"><strong>Add it to monitoring</strong> &mdash; register an HTTP/TCP check in Uptime Kuma so an outage is visible instead of silent.</div></div>
+          <div class="step"><div class="num">12</div><div class="txt"><strong>Backup/restore</strong> &mdash; confirm persistent data lives under the path covered by the VM-level PBS backup. Only add app-specific backup logic if the data genuinely can't be captured that way.</div></div>
+          <div class="step"><div class="num">13</div><div class="txt"><strong>Validate before deploying</strong> &mdash; run <code>docker compose config</code> to catch interpolation and syntax errors before they hit a running host.</div></div>
+          <div class="step"><div class="num">14</div><div class="txt"><strong>Deploy staged</strong> &mdash; bring it up manually via SSH + compose first, confirm it's healthy, before wiring it into Komodo for visibility or any future automation.</div></div>
+          <div class="step"><div class="num">15</div><div class="txt"><strong>Know the rollback path</strong> &mdash; keep the previous known-good image tag noted so <code>docker compose up -d</code> with that tag is a one-line revert; fall back to a PBS restore only for whole-VM-level problems.</div></div>
+          <div class="step"><div class="num">16</div><div class="txt"><strong>Update the docs</strong> &mdash; add the new routes/ports to the repo's route and port inventories and note any new Caddy pattern if one was introduced.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DEPLOYMENT ============ -->
+  <section id="deployment" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Current manual deployment</h2><div class="sub">Every stack here is deployable by hand, over SSH</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+
+        <figure class="snippet">
+          <figcaption>Generic stack (any app-style directory)</figcaption>
+          <div class="code"><span class="c"># from the stack's own directory</span>
+cp .env.example .env   <span class="c"># fill in real values, kept outside Git</span>
+docker compose config
+docker compose up -d
+docker compose ps</div>
+        </figure>
+
+        <figure class="snippet">
+          <figcaption>Caddy &mdash; reload does not work, restart does</figcaption>
+          <div class="code">cd caddy &amp;&amp; docker compose -p caddy up -d
+
+<span class="c"># config change afterward:</span>
+docker restart caddy   <span class="c"># NOT `caddy reload` -- admin API is off deliberately</span>
+
+docker logs caddy</div>
+        </figure>
+        <p class="lead">Caddy's admin API is fully disabled (<code>admin off</code> in the global block), not just left unbound, so the usual <code>caddy reload</code> live-reload path genuinely cannot work here. Any Caddyfile change needs <code>docker restart caddy</code>, which is a brief outage for every site Caddy fronts &mdash; plan config changes accordingly rather than expecting a zero-downtime reload.</p>
+
+        <figure class="snippet">
+          <figcaption>Authentik &mdash; needs an explicit env-file for Compose's own variable interpolation</figcaption>
+          <div class="code">docker compose --env-file &lt;secrets dir&gt;/authentik/authentik.env up -d</div>
+        </figure>
+        <p class="lead"><code>env_file:</code> inside the compose file alone is not enough here &mdash; Compose's own <code>${VAR}</code> interpolation only reads a <code>--env-file</code> flag or a <code>.env</code> file next to the compose file, not the container-level <code>env_file:</code> directive. Both are used together deliberately.</p>
+
+        <figure class="snippet">
+          <figcaption>Komodo &mdash; wrapped in a deploy script because of its encrypted secrets</figcaption>
+          <div class="code">cd &lt;homelab-stacks repo&gt;/komodo
+./deploy.sh</div>
+        </figure>
+        <p class="lead">Komodo's database credentials are committed to the repo only in encrypted form (sops + age). <code>deploy.sh</code> decrypts them to a memory-backed path using a root-only key kept outside Git, runs <code>docker compose up -d</code>, then removes the decrypted copy &mdash; plaintext credentials never touch persistent disk.</p>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RELEASES ============ -->
+  <section id="releases" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Releases &amp; automated deployment</h2><div class="sub">What exists today, and what's proposed</div></div></div>
+      </div>
+      <div class="panel-body">
+
+        <div>
+          <h3 class="block-title">Today <span class="pill good" style="margin-left:6px;"><span class="dot"></span>current</span></h3>
+          <p class="lead">As of this snapshot (a point-in-time statement supplied for this page, not something pulled from the linked repository's own docs): <strong>NOW has no GitHub Actions workflow, no tagged releases, and no verified automated release-to-deployment pipeline.</strong> Getting a new build onto the VM today means the manual <code>docker compose</code> procedure above &mdash; there is no CI step, no image registry push, and no webhook in this loop right now.</p>
+        </div>
+
+        <div>
+          <h3 class="block-title">Proposed pipeline <span class="pill planned" style="margin-left:6px;">planned &mdash; not implemented</span></h3>
+          <div class="flow" role="group" aria-hidden="true" style="margin-top:4px;">
+            <div class="flow-node dim">Tag / release</div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node dim">GitHub Actions<br><span class="flow-sub">test + build</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node dim">GHCR<br><span class="flow-sub">immutable tag / SHA</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node dim">Komodo<br><span class="flow-sub">webhook / resource sync</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node dim">Controlled redeploy<br><span class="flow-sub">docker compose</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node dim">Health check</div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node dim">Rollback path</div>
+          </div>
+          <ol class="flow-desc">
+            <li>A tagged release triggers a GitHub Actions workflow that runs tests and builds the image</li>
+            <li>The image is pushed to GHCR under an immutable tag or commit SHA &mdash; never a floating <code>:latest</code></li>
+            <li>Komodo picks up the new image via a webhook or resource sync</li>
+            <li>Komodo drives a controlled <code>docker compose</code> redeploy on the Services VM</li>
+            <li>A health check gates success; a known rollback path (previous pinned tag) exists if it fails</li>
+          </ol>
+          <p class="lead" style="margin-top:14px;"><strong>Komodo itself stays Tailscale-only in this proposal</strong> &mdash; none of this implies exposing Komodo's UI to the internet. If a webhook receiver is ever introduced so GitHub can notify Komodo of a new image, it would be a narrowly scoped, signature-verified receiver endpoint added deliberately behind Caddy &mdash; never the Komodo UI itself, and never an unauthenticated endpoint. None of this pipeline exists yet; it's a proposal to evaluate against the manual process above, not a plan with a committed timeline.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ OPERATIONS ============ -->
+  <section id="operations" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Operations &amp; monitoring</h2><div class="sub">Scheduled checks and firewall posture</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <div class="kv">
+          <div class="kv-item"><span class="qr-key">Health check timer</span><span class="qr-val">every ~15 min &middot; disk / containers / sites &middot; notifies on state change only</span></div>
+          <div class="kv-item"><span class="qr-key">Uptime monitoring</span><span class="qr-val">Uptime Kuma, Tailscale-only, HTTP(S)/TCP checks</span></div>
+          <div class="kv-item"><span class="qr-key">Firewall default</span><span class="qr-val">deny incoming; SSH limited to the LAN and the Tailscale range; the Cloudflare Tunnel is outbound-only so it needs no inbound rule at all</span></div>
+          <div class="kv-item"><span class="qr-key">Caddy admin API</span><span class="qr-val"><code>admin off</code> &mdash; fully disabled, not just unbound</span></div>
+        </div>
+        <div class="callout">
+          <strong>Docker bypasses UFW for published ports.</strong> Docker manipulates iptables directly for anything a container publishes, which sidesteps UFW's filter rules entirely. The real access control for Komodo, Uptime Kuma, and Caddy is which interface IP each is bound to (LAN vs. Tailscale), not a UFW rule &mdash; SSH is the one exception, since it's a non-Docker service genuinely governed by UFW.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BACKUP ============ -->
+  <section id="backup" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Backup &amp; restore</h2><div class="sub">Whole-VM, via Proxmox Backup Server &mdash; nothing runs inside this VM to produce it</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <div class="kv">
+          <div class="kv-item"><span class="qr-key">Schedule</span><span class="qr-val">Daily, 03:00, snapshot mode, zstd compression</span></div>
+          <div class="kv-item"><span class="qr-key">Retention</span><span class="qr-val">7 daily / 4 weekly / 3 monthly, auto-pruned</span></div>
+          <div class="kv-item"><span class="qr-key">Garbage collection</span><span class="qr-val">Weekly, Sundays 04:00 &mdash; reclaims chunks pruning alone doesn't free</span></div>
+          <div class="kv-item"><span class="qr-key">Dedup, observed</span><span class="qr-val">First backup of this VM: 290 GB nominal disk &rarr; 6 GB of real chunk storage</span></div>
+          <div class="kv-item"><span class="qr-key">Encryption</span><span class="qr-val">Not enabled &mdash; simpler restores, at the cost of the backup drive itself being sensitive if it's ever removed</span></div>
+          <div class="kv-item"><span class="qr-key">Notifications</span><span class="qr-val">Every backup job result, plus a datastore-capacity alert at 80% used, both routed to the same alerting channel used elsewhere in this repo</span></div>
+        </div>
+
+        <div>
+          <h3 class="block-title">Restoring this VM, fastest to slowest</h3>
+          <div class="steps">
+            <div class="step"><div class="num">01</div><div class="txt"><strong>Proxmox web UI</strong> &mdash; select VM 101 &rarr; Backup tab &rarr; pick a snapshot &rarr; Restore, in place or to a new VMID.</div></div>
+            <div class="step"><div class="num">02</div><div class="txt"><strong>PBS web UI</strong> &mdash; browse a snapshot's file contents or restore individual files without touching the whole VM.</div></div>
+            <div class="step"><div class="num">03</div><div class="txt"><strong>CLI, from the Proxmox host</strong> &mdash; list then restore:
+              <div class="code" style="margin-top:8px;"><span class="c"># list backups for VM 101</span>
+pvesm list homelab-pbs --vmid 101
+
+<span class="c"># restore in place</span>
+qmrestore &lt;backup-volid&gt; 101 --storage local-lvm
+
+<span class="c"># or run an ad-hoc backup instead of waiting for 03:00</span>
+vzdump 101 --storage homelab-pbs --mode snapshot --compress zstd</div>
+            </div></div>
+            <div class="step"><div class="num">04</div><div class="txt"><strong>Full hardware loss</strong> &mdash; only recoverable if the backup drive itself survived; requires rebuilding Proxmox and PBS on new hardware and re-registering the existing datastore rather than reformatting it.</div></div>
+          </div>
+        </div>
+
+        <div class="callout crit">
+          <strong>Disaster recovery caveat:</strong> the backup datastore lives on one drive in the same machine it protects. That covers accidental deletion, bad deploys, and Proxmox-level mistakes &mdash; it does not cover that machine dying, being stolen, or a fire. Real disaster recovery requires periodically rotating the drive to a physically separate location; without that habit, this is backup, not DR, despite the software being called a Backup Server.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FAILURE MODES ============ -->
+  <section id="failure-modes" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Known failure modes</h2><div class="sub">Gotchas already hit once &mdash; don't re-discover them</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="steps">
+          <div class="step"><div class="num">01</div><div class="txt"><strong>Caddy config changes need a restart, not a reload.</strong> <code>admin off</code> means <code>caddy reload</code> has no admin API to talk to. Use <code>docker restart caddy</code> and expect a brief outage on every Caddy-fronted site.</div></div>
+          <div class="step"><div class="num">02</div><div class="txt"><strong>Caddy can't bind one site to one host IP under normal bridge networking.</strong> Docker's port-publish rewrites the destination to the container's internal address before Caddy sees which host IP a request arrived on. A per-site <code>bind</code> directive doesn't achieve host-IP-based access control here &mdash; it previously crash-looped Caddy with <code>bind: cannot assign requested address</code>. This is why Tailscale-only admin tools publish directly instead of going through Caddy.</div></div>
+          <div class="step"><div class="num">03</div><div class="txt"><strong>cloudflared needs an explicit TLS SNI override per ingress rule.</strong> Without setting the origin server name explicitly, cloudflared uses the internal service hostname (e.g. <code>caddy</code>) as the TLS SNI, which matches no site block in the Caddyfile and fails the handshake (<code>tls: internal error</code>, surfaced to visitors as a 502).</div></div>
+          <div class="step"><div class="num">04</div><div class="txt"><strong>Caddy's internal CA regenerates if its data volume is recreated.</strong> Anything that pins Caddy's internal-TLS root certificate (like cloudflared's origin verification) needs re-extracting after that happens, or origin TLS verification will fail.</div></div>
+          <div class="step"><div class="num">05</div><div class="txt"><strong>Query strings are logged verbatim.</strong> Caddy's access logging redacts <code>Set-Cookie</code> automatically but does not redact query parameters. No app behind this Caddyfile may put a secret in a query string.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VERIFICATION ============ -->
+  <section id="verification" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Verification checklist</h2><div class="sub">Run through this after any deploy or config change</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="steps">
+          <div class="step"><div class="num">01</div><div class="txt">Validate the compose file before applying anything: <code>docker compose config</code>.</div></div>
+          <div class="step"><div class="num">02</div><div class="txt">Confirm containers are actually up and healthy: <code>docker compose ps</code>, then check any container-reported health status.</div></div>
+          <div class="step"><div class="num">03</div><div class="txt">Tail logs for the affected service for obvious errors: <code>docker logs &lt;container&gt;</code>.</div></div>
+          <div class="step"><div class="num">04</div><div class="txt">If Caddy config changed, confirm it actually restarted (<code>admin off</code> means no reload feedback loop to rely on) and check <code>docker logs caddy</code> for TLS or upstream errors.</div></div>
+          <div class="step"><div class="num">05</div><div class="txt">Hit the route through its real path &mdash; through the tunnel for a public app, over Tailscale for an admin tool &mdash; not just container-to-container, to catch routing/DNS/TLS issues the internal check would miss.</div></div>
+          <div class="step"><div class="num">06</div><div class="txt">Confirm the corresponding Uptime Kuma monitor reflects the change (new route added, or an existing one still green).</div></div>
+          <div class="step"><div class="num">07</div><div class="txt">Update the route/port inventory docs if anything about the app's exposure changed.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ REFERENCE ============ -->
+  <section id="reference" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><h2>Quick reference</h2></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+
+        <div>
+          <h3 class="block-title">Routes</h3>
+          <div class="tbl-wrap">
+            <table>
+              <thead><tr><th scope="col">Hostname / address</th><th scope="col">Reachable from</th><th scope="col">Auth</th></tr></thead>
+              <tbody>
+                <tr><td>now.dorbenyehuda.com</td><td class="dim">Anywhere, via Cloudflare Tunnel</td><td class="dim">None &mdash; accepted risk</td></tr>
+                <tr><td>&lt;NOW LAN hostname&gt;</td><td class="dim">LAN only</td><td class="dim">None &mdash; matches the public route</td></tr>
+                <tr><td>&lt;Authentik LAN hostname&gt;</td><td class="dim">LAN only</td><td class="dim">Authentik's own login</td></tr>
+                <tr><td>&lt;services Tailscale IP&gt;:9120</td><td class="dim">Tailscale only</td><td class="dim">Komodo's own login</td></tr>
+                <tr><td>&lt;services Tailscale IP&gt;:3001</td><td class="dim">Tailscale only</td><td class="dim">Uptime Kuma's own login</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div>
+          <h3 class="block-title">Explicitly not public</h3>
+          <p class="lead">Komodo and Uptime Kuma (Tailscale-only, never through Caddy or the tunnel); the Proxmox and PBS web UIs (never exposed publicly, out of scope for this VM); any database &mdash; Authentik's Postgres, Komodo's Mongo (internal Docker networks only, no host publish, no tunnel route).</p>
+        </div>
+
+        <div>
+          <h3 class="block-title">Pinned image versions in use</h3>
+          <div class="code">caddy                        2.11.4
+cloudflared                  2026.8.3
+goauthentik/server           2026.8.1
+postgres (Authentik)         16-alpine
+komodo-core / periphery      2.3.2
+mongo (Komodo)                7.0.40
+uptime-kuma                  1</div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Services VM Runbook &middot; generated from the <code>homelab-stacks</code> repository snapshot &mdash; may drift from the live VM</span>
+    <span><a href="index.html">&larr; Back to Shared Pages</a></span>
+  </footer>
+
+</div>
+</body>
+</html>

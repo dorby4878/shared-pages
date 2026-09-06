@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shared Pages</title>
+<meta name="description" content="Public index of self-hosted infrastructure runbooks.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#F3F4F1;
+  --surface:#FFFFFF;
+  --surface-2:#E9ECE7;
+  --line:#D9DCD4;
+  --ink:#1B211D;
+  --ink-soft:#54605A;
+  --ink-faint:#838F88;
+  --accent:#C9622A;
+  --accent-ink:#FFFFFF;
+  --good:#2F6F62;
+  --focus:#2F6F62;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14181A; --surface:#1B2124; --surface-2:#212A2C; --line:#2B3436;
+    --ink:#E8EBE6; --ink-soft:#AAB3AD; --ink-faint:#71807A;
+    --accent:#E0824A; --accent-ink:#191008; --good:#54AC98; --focus:#54AC98;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14181A; --surface:#1B2124; --surface-2:#212A2C; --line:#2B3436;
+  --ink:#E8EBE6; --ink-soft:#AAB3AD; --ink-faint:#71807A;
+  --accent:#E0824A; --accent-ink:#191008; --good:#54AC98; --focus:#54AC98;
+}
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{
+  margin:0;
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,.mono,code,.meta,.eyebrow{font-family:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;}
+h1,h2{text-wrap:balance; margin:0;}
+a{color:var(--good);}
+::selection{background:var(--accent); color:var(--accent-ink);}
+:focus-visible{outline:2px solid var(--focus); outline-offset:2px;}
+@media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; scroll-behavior:auto !important;} }
+
+.wrap{max-width:760px; margin:0 auto; padding:0 24px 96px;}
+
+.topbar{border-bottom:1px solid var(--line);}
+.topbar-inner{max-width:760px; margin:0 auto; padding:14px 24px; display:flex; align-items:center; gap:10px;}
+.mark{width:10px; height:10px; border-radius:2px; background:var(--accent); display:inline-block; flex:none;}
+.brand-name{font-weight:600; font-size:15px; letter-spacing:0.01em;}
+
+header.hero{padding:56px 0 8px;}
+.eyebrow{font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); font-weight:600; margin:0 0 12px;}
+h1.title{font-size:36px; font-weight:700; letter-spacing:-0.01em;}
+.hero-sub{color:var(--ink-soft); font-size:15.5px; margin-top:14px; max-width:58ch;}
+
+.doc-list{list-style:none; margin:40px 0 0; padding:0; border-top:1px solid var(--line);}
+.doc-item{border-bottom:1px solid var(--line);}
+.doc-link{
+  display:block; padding:24px 4px; text-decoration:none; color:inherit;
+  border-radius:4px;
+}
+.doc-link:hover .doc-title{color:var(--good); border-color:var(--good);}
+.doc-title{
+  font-size:19px; font-weight:600; color:var(--ink);
+  border-bottom:1px solid transparent; display:inline-block; padding-bottom:1px;
+}
+.doc-path{font-size:12px; color:var(--ink-faint); margin-left:10px;}
+.doc-desc{font-size:14px; color:var(--ink-soft); margin-top:8px; max-width:64ch;}
+.doc-tags{margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;}
+.tag{
+  font-size:10.5px; font-weight:600; letter-spacing:0.03em; text-transform:uppercase;
+  padding:2px 8px; border-radius:99px; border:1px solid var(--line); color:var(--ink-faint);
+}
+
+.about{margin-top:52px; padding-top:24px; border-top:1px solid var(--line);}
+.about h2{font-size:12px; text-transform:uppercase; letter-spacing:0.07em; color:var(--ink-faint); font-weight:600; margin-bottom:10px;}
+.about p{font-size:13.5px; color:var(--ink-soft); max-width:64ch; margin:0 0 10px;}
+
+footer{margin-top:56px; padding-top:20px; border-top:1px solid var(--line); color:var(--ink-faint); font-size:12px;}
+
+@media print{
+  .topbar{position:static;}
+  a{color:var(--ink); text-decoration:underline;}
+}
+@media (max-width:560px){
+  h1.title{font-size:28px;}
+  .doc-path{display:block; margin-left:0; margin-top:2px;}
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <span class="mark" aria-hidden="true"></span>
+    <span class="brand-name">Shared Pages</span>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <p class="eyebrow">Public reference</p>
+    <h1 class="title">Shared Pages</h1>
+    <p class="hero-sub">A small, static index of infrastructure documentation published for reference. No accounts, no tracking, no dashboards &mdash; just the runbooks below.</p>
+  </header>
+
+  <nav aria-label="Published documents">
+    <ul class="doc-list">
+      <li class="doc-item">
+        <a class="doc-link" href="homelab-runbook.html">
+          <span class="doc-title">Home Lab Runbook</span><span class="doc-path">homelab-runbook.html</span>
+          <p class="doc-desc">Physical layer, per-VM configuration, backup topology, and open cleanup items across the home lab &mdash; hypervisor, agent host, services host, and backup server.</p>
+          <span class="doc-tags"><span class="tag">Infrastructure</span><span class="tag">Overview</span></span>
+        </a>
+      </li>
+      <li class="doc-item">
+        <a class="doc-link" href="services-vm-runbook.html">
+          <span class="doc-title">Services VM Runbook</span><span class="doc-path">services-vm-runbook.html</span>
+          <p class="doc-desc">Detailed operational reference for the Services VM: current edge/auth architecture, deployment procedure, monitoring and backup, and the checklist for adding a new application &mdash; with current state and proposed work clearly separated.</p>
+          <span class="doc-tags"><span class="tag">Operations</span><span class="tag">Runbook</span></span>
+        </a>
+      </li>
+    </ul>
+  </nav>
+
+  <div class="about">
+    <h2>About this site</h2>
+    <p>These pages document a personally operated home lab. They're published for transparency and as a personal reference, not as a product or service. Content reflects the state of the underlying infrastructure repository at the time each page was generated and may drift from what's actually running.</p>
+  </div>
+
+  <footer>
+    Shared Pages &middot; static, self-contained, no server-side component
+  </footer>
+
+</div>
+</body>
+</html>
