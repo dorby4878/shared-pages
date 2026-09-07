@@ -467,6 +467,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
         <div class="panel-head-left"><div><h2>Checklist: adding a new application</h2><div class="sub">Operational steps derived from the established patterns above</div></div></div>
       </div>
       <div class="panel-body">
+        <p class="lead" style="margin-bottom:14px;">Updated 2026&#8209;09&#8209;08 &mdash; <code>homelab-stacks/platform/scripts/onboard-app.sh</code> now automates most of steps 01&ndash;10 below from a single small app definition (name, repo, domain, port, exposure mode, health path). This checklist remains the underlying principles it encodes and the reference for anything it doesn't cover yet (11&ndash;16). See <code>platform/docs/app-onboarding.md</code> in the repo.</p>
         <div class="steps">
           <div class="step"><div class="num">01</div><div class="txt"><strong>Repo layout</strong> &mdash; give it its own directory (an application stack alongside the other per-service directories in the IaC repo), not a subfolder of an unrelated stack.</div></div>
           <div class="step"><div class="num">02</div><div class="txt"><strong>Compose file</strong> &mdash; must run standalone with plain <code>docker compose up -d</code> over SSH. Never make it depend on Komodo to function.</div></div>
@@ -539,40 +540,37 @@ docker logs caddy</div>
   <section id="releases" class="host">
     <div class="panel">
       <div class="panel-head">
-        <div class="panel-head-left"><div><h2>Releases &amp; automated deployment</h2><div class="sub">What exists today, and what's proposed</div></div></div>
+        <div class="panel-head-left"><div><h2>Releases &amp; automated deployment</h2><div class="sub">Live for NOW, generalized into a reusable platform for every future app</div></div></div>
       </div>
       <div class="panel-body">
 
         <div>
           <h3 class="block-title">Today <span class="pill good" style="margin-left:6px;"><span class="dot"></span>current</span></h3>
-          <p class="lead">As of this snapshot (a point-in-time statement supplied for this page, not something pulled from the linked repository's own docs): <strong>NOW has no GitHub Actions workflow, no tagged releases, and no verified automated release-to-deployment pipeline.</strong> Getting a new build onto the VM today means the manual <code>docker compose</code> procedure above &mdash; there is no CI step, no image registry push, and no webhook in this loop right now.</p>
-        </div>
-
-        <div>
-          <h3 class="block-title">Proposed pipeline <span class="pill planned" style="margin-left:6px;">planned &mdash; not implemented</span></h3>
+          <p class="lead">Updated 2026&#8209;09&#8209;08 &mdash; this section previously described the pipeline below as a proposal; it has since gone live for NOW and been generalized (<code>homelab-stacks/platform/</code> and <code>.github/workflows/reusable-*.yml</code>) so any future app can reuse it with a small app-definition instead of hand-building CI/CD again. See <code>platform/docs/app-onboarding.md</code> in the repo for the full picture.</p>
           <div class="flow" role="group" aria-hidden="true" style="margin-top:4px;">
-            <div class="flow-node dim">Tag / release</div>
+            <div class="flow-node">Merge to main</div>
             <span class="flow-arrow">&rarr;</span>
-            <div class="flow-node dim">GitHub Actions<br><span class="flow-sub">test + build</span></div>
+            <div class="flow-node">GitHub Actions<br><span class="flow-sub">test + build</span></div>
             <span class="flow-arrow">&rarr;</span>
-            <div class="flow-node dim">GHCR<br><span class="flow-sub">immutable tag / SHA</span></div>
+            <div class="flow-node">GHCR<br><span class="flow-sub">immutable tag: sha-&lt;commit&gt;, optional vX.Y.Z</span></div>
             <span class="flow-arrow">&rarr;</span>
-            <div class="flow-node dim">Komodo<br><span class="flow-sub">webhook / resource sync</span></div>
+            <div class="flow-node">homelab-stacks<br><span class="flow-sub">auto compose-tag bump PR</span></div>
             <span class="flow-arrow">&rarr;</span>
-            <div class="flow-node dim">Controlled redeploy<br><span class="flow-sub">docker compose</span></div>
+            <div class="flow-node">Komodo<br><span class="flow-sub">manual "Deploy" click</span></div>
             <span class="flow-arrow">&rarr;</span>
-            <div class="flow-node dim">Health check</div>
+            <div class="flow-node">Health check</div>
             <span class="flow-arrow">&rarr;</span>
-            <div class="flow-node dim">Rollback path</div>
+            <div class="flow-node">Rollback path</div>
           </div>
           <ol class="flow-desc">
-            <li>A tagged release triggers a GitHub Actions workflow that runs tests and builds the image</li>
-            <li>The image is pushed to GHCR under an immutable tag or commit SHA &mdash; never a floating <code>:latest</code></li>
-            <li>Komodo picks up the new image via a webhook or resource sync</li>
-            <li>Komodo drives a controlled <code>docker compose</code> redeploy on the Services VM</li>
-            <li>A health check gates success; a known rollback path (previous pinned tag) exists if it fails</li>
+            <li>Merging to an app's <code>main</code> branch runs a reusable GitHub Actions workflow (test + build validation already happened on the PR)</li>
+            <li>The image is pushed to GHCR under an immutable tag &mdash; commit SHA always, plus a <code>vX.Y.Z</code> tag when a version tag was used &mdash; never a floating <code>:latest</code></li>
+            <li>The workflow opens (and, for newly onboarded apps, auto-merges) a PR in <code>homelab-stacks</code> bumping that app's compose file to the new tag, and records the previous tag for rollback</li>
+            <li><strong>Deployment itself is a deliberate manual step:</strong> a human opens Komodo and presses Deploy on that app's Stack. Nothing above triggers a redeploy automatically &mdash; every onboarded Stack is configured with auto-update, poll-for-updates, and webhook triggers all off, verified against Komodo's own resource schema. Immediate, fully-automatic deployment was considered and intentionally deferred; the architecture supports adding it later without a redesign, but that's out of scope for now.</li>
+            <li>A health check (container state, Docker health, in-network health endpoint, routed hostname &mdash; <code>platform/scripts/verify-deployment.sh</code>) gates whether the deploy is considered successful</li>
+            <li>Rollback: <code>platform/scripts/deploy-app.sh &lt;app&gt; --rollback</code> prepares/merges a PR back to the previous known-good tag, then the same manual Deploy click applies it</li>
           </ol>
-          <p class="lead" style="margin-top:14px;"><strong>Komodo itself stays Tailscale-only in this proposal</strong> &mdash; none of this implies exposing Komodo's UI to the internet. If a webhook receiver is ever introduced so GitHub can notify Komodo of a new image, it would be a narrowly scoped, signature-verified receiver endpoint added deliberately behind Caddy &mdash; never the Komodo UI itself, and never an unauthenticated endpoint. None of this pipeline exists yet; it's a proposal to evaluate against the manual process above, not a plan with a committed timeline.</p>
+          <p class="lead" style="margin-top:14px;"><strong>Komodo itself stays Tailscale-only.</strong> None of this exposes Komodo's UI to the internet. A signature-verified webhook receiver for Komodo was in fact partially built (a narrow Caddy/Cloudflare route, still present) as an earlier, different design aimed at fully automatic deployment &mdash; it was deliberately never activated (DNS record, GitHub webhook registration, and the restart to pick it up were never completed) once manual-deploy-only became the actual requirement, and completing that cutover now would contradict it.</p>
         </div>
 
       </div>
