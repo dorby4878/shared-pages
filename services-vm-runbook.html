@@ -280,7 +280,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
     <p class="hero-sub">Edge, reverse proxy, identity, and admin access for the home lab's public-facing and internally-managed applications. Current behavior and proposed-but-not-built work are labeled separately throughout &mdash; nothing here should be read as implemented unless it's marked <strong>current</strong>.</p>
     <div class="scan-time">
       <span class="dot" aria-hidden="true"></span>
-      <span><strong>Source of truth / last verified:</strong> generated from the <code>homelab-stacks</code> infrastructure-as-code repository snapshot dated 2026&#8209;09&#8209;06 (compose files and <code>docs/</code>). It can drift from what's actually running on the live VM &mdash; treat conflicts in favor of re-checking the repo and the VM itself, not this page.</span>
+      <span><strong>Source of truth / last verified:</strong> generated from the <code>homelab-stacks</code> infrastructure-as-code repository snapshot dated 2026&#8209;09&#8209;09 (compose files and <code>docs/</code>, including <code>docs/APP-ONBOARDING.md</code>). It can drift from what's actually running on the live VM &mdash; treat conflicts in favor of re-checking the repo and the VM itself, not this page.</span>
     </div>
   </header>
 
@@ -333,7 +333,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
               <tr><td>komodo-periphery</td><td class="dim">ghcr.io/moghtech/komodo-periphery:2.3.2</td><td class="dim">Agent that lets Core manage this host &mdash; not published at all</td></tr>
               <tr><td>komodo-mongo</td><td class="dim">mongo:7.0.40</td><td class="dim">Komodo's database &mdash; not published, no host port</td></tr>
               <tr><td>uptime-kuma</td><td class="dim">louislam/uptime-kuma:1</td><td class="dim">Uptime/status monitoring &mdash; Tailscale-only</td></tr>
-              <tr><td>now-web, now-server</td><td class="dim">built from the NOW app repo (nginx static + Socket.IO)</td><td class="dim">Public end-user application</td></tr>
+              <tr><td>now-web, now-server</td><td class="dim">ghcr.io/&hellip;/now-web, now-server &mdash; immutable release tags</td><td class="dim">Public end-user application &mdash; first app onboarded onto the platform below</td></tr>
             </tbody>
           </table>
         </div>
@@ -464,9 +464,22 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
   <section id="new-app" class="host">
     <div class="panel">
       <div class="panel-head">
-        <div class="panel-head-left"><div><h2>Checklist: adding a new application</h2><div class="sub">Operational steps derived from the established patterns above</div></div></div>
+        <div class="panel-head-left"><div><h2>Checklist: adding a new application</h2><div class="sub">Mostly automated today &mdash; the steps below are what the tooling does for you, plus what's still manual</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
       </div>
       <div class="panel-body">
+        <p class="lead">Onboarding a new application is a single idempotent command in the infrastructure repo:</p>
+        <figure class="snippet">
+          <figcaption>One command, safe to re-run</figcaption>
+          <div class="code">./scripts/onboard-app.sh \
+  --name finance \
+  --repo &lt;owner&gt;/finance \
+  --domain finance.example.com \
+  --port 3000 \
+  --exposure public \
+  --health /health</div>
+        </figure>
+        <p class="lead">It validates the name against every other registered app (no domain/port/stack-name collisions), then generates or updates the app's compose file, Caddy site block, Cloudflare Tunnel ingress rule, and Komodo Stack declaration together, and opens one PR with all of it. Re-running it with the same flags changes nothing. What's still a genuinely manual, one-time step: the Cloudflare dashboard DNS record for a new public hostname, installing the GitHub App on the new app's own repo, and (once, ever) pointing Komodo at the infrastructure repo's declarative Stack definitions in the first place. Everything below is what that script encodes, for anyone touching a stack by hand instead.</p>
         <div class="steps">
           <div class="step"><div class="num">01</div><div class="txt"><strong>Repo layout</strong> &mdash; give it its own directory (an application stack alongside the other per-service directories in the IaC repo), not a subfolder of an unrelated stack.</div></div>
           <div class="step"><div class="num">02</div><div class="txt"><strong>Compose file</strong> &mdash; must run standalone with plain <code>docker compose up -d</code> over SSH. Never make it depend on Komodo to function.</div></div>
@@ -539,41 +552,42 @@ docker logs caddy</div>
   <section id="releases" class="host">
     <div class="panel">
       <div class="panel-head">
-        <div class="panel-head-left"><div><h2>Releases &amp; automated deployment</h2><div class="sub">What exists today, and what's proposed</div></div></div>
+        <div class="panel-head-left"><div><h2>Releases &amp; deployment</h2><div class="sub">CI/release is fully automatic; the production deploy step is deliberately not</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
       </div>
       <div class="panel-body">
 
-        <div>
-          <h3 class="block-title">Today <span class="pill good" style="margin-left:6px;"><span class="dot"></span>current</span></h3>
-          <p class="lead">As of this snapshot (a point-in-time statement supplied for this page, not something pulled from the linked repository's own docs): <strong>NOW has no GitHub Actions workflow, no tagged releases, and no verified automated release-to-deployment pipeline.</strong> Getting a new build onto the VM today means the manual <code>docker compose</code> procedure above &mdash; there is no CI step, no image registry push, and no webhook in this loop right now.</p>
-        </div>
+        <p class="lead"><strong>Every app repo (NOW today, more to follow) carries a thin wrapper workflow calling reusable CI/release workflows in a dedicated <code>homelab-actions</code> repo</strong> &mdash; no per-app GitHub Actions boilerplate. Onboarding a new application (registry entry, generated compose file, Caddy/cloudflared config, Komodo Stack declaration) is itself a one-command, idempotent script in <code>homelab-stacks</code> &mdash; see the checklist below.</p>
 
-        <div>
-          <h3 class="block-title">Proposed pipeline <span class="pill planned" style="margin-left:6px;">planned &mdash; not implemented</span></h3>
-          <div class="flow" role="group" aria-hidden="true" style="margin-top:4px;">
-            <div class="flow-node dim">Tag / release</div>
-            <span class="flow-arrow">&rarr;</span>
-            <div class="flow-node dim">GitHub Actions<br><span class="flow-sub">test + build</span></div>
-            <span class="flow-arrow">&rarr;</span>
-            <div class="flow-node dim">GHCR<br><span class="flow-sub">immutable tag / SHA</span></div>
-            <span class="flow-arrow">&rarr;</span>
-            <div class="flow-node dim">Komodo<br><span class="flow-sub">webhook / resource sync</span></div>
-            <span class="flow-arrow">&rarr;</span>
-            <div class="flow-node dim">Controlled redeploy<br><span class="flow-sub">docker compose</span></div>
-            <span class="flow-arrow">&rarr;</span>
-            <div class="flow-node dim">Health check</div>
-            <span class="flow-arrow">&rarr;</span>
-            <div class="flow-node dim">Rollback path</div>
-          </div>
-          <ol class="flow-desc">
-            <li>A tagged release triggers a GitHub Actions workflow that runs tests and builds the image</li>
-            <li>The image is pushed to GHCR under an immutable tag or commit SHA &mdash; never a floating <code>:latest</code></li>
-            <li>Komodo picks up the new image via a webhook or resource sync</li>
-            <li>Komodo drives a controlled <code>docker compose</code> redeploy on the Services VM</li>
-            <li>A health check gates success; a known rollback path (previous pinned tag) exists if it fails</li>
-          </ol>
-          <p class="lead" style="margin-top:14px;"><strong>Komodo itself stays Tailscale-only in this proposal</strong> &mdash; none of this implies exposing Komodo's UI to the internet. If a webhook receiver is ever introduced so GitHub can notify Komodo of a new image, it would be a narrowly scoped, signature-verified receiver endpoint added deliberately behind Caddy &mdash; never the Komodo UI itself, and never an unauthenticated endpoint. None of this pipeline exists yet; it's a proposal to evaluate against the manual process above, not a plan with a committed timeline.</p>
+        <div class="flow" role="group" aria-hidden="true" style="margin-top:14px;">
+          <div class="flow-node">PR</div>
+          <span class="flow-arrow">&rarr;</span>
+          <div class="flow-node">Reusable CI<br><span class="flow-sub">typecheck + test + build</span></div>
+          <span class="flow-arrow">&rarr;</span>
+          <div class="flow-node">Merge</div>
+          <span class="flow-arrow">&rarr;</span>
+          <div class="flow-node"><code>vX.Y.Z</code> tag<br><span class="flow-sub">reusable release workflow</span></div>
+          <span class="flow-arrow">&rarr;</span>
+          <div class="flow-node">GHCR<br><span class="flow-sub">immutable tag + commit SHA</span></div>
+          <span class="flow-arrow">&rarr;</span>
+          <div class="flow-node">Auto-opened PR<br><span class="flow-sub">bumps homelab-stacks compose</span></div>
         </div>
+        <p class="lead" style="margin-top:10px;">That auto-opened PR is where automation <strong>stops</strong>. Nothing merges it, and merging it does not deploy anything.</p>
+
+        <div class="flow" role="group" aria-hidden="true" style="margin-top:22px;">
+          <div class="flow-node">Human merges<br><span class="flow-sub">bump PR</span></div>
+          <span class="flow-arrow">&rarr;</span>
+          <div class="flow-node">Komodo ResourceSync<br><span class="flow-sub">config only &mdash; <code>deploy = false</code></span></div>
+          <span class="flow-arrow">&rarr;</span>
+          <div class="flow-node accent">Human presses Deploy<br><span class="flow-sub">in the Komodo UI</span></div>
+          <span class="flow-arrow">&rarr;</span>
+          <div class="flow-node">Controlled redeploy<br><span class="flow-sub">docker compose, that Stack only</span></div>
+          <span class="flow-arrow">&rarr;</span>
+          <div class="flow-node">Health verification</div>
+        </div>
+        <p class="lead" style="margin-top:10px;"><strong>Pressing Deploy in Komodo is the only recurring manual production step, by design.</strong> An earlier design wired a GitHub push directly into a signed Komodo webhook listener for automatic redeployment &mdash; it was reverted from the infrastructure repo before ever being activated (no DNS/tunnel cutover happened, no GitHub webhook was ever registered) specifically to preserve this manual gate. Komodo's <code>ResourceSync</code> resource keeps its <em>stored</em> Stack configuration (the image tag to deploy) in sync with what's merged in git, either on its own poll interval or a manual "Execute Sync" &mdash; that alone never redeploys a running container. Rollback is the same shape in reverse: revert or open a new PR pointing at the previous immutable tag, merge, sync, press Deploy again. Komodo itself stays Tailscale-only throughout &mdash; none of this exposes its UI or API publicly.</p>
+
+        <p class="lead" style="margin-top:14px;"><strong>GitHub authentication:</strong> a single least-privilege GitHub App (repository-scoped Contents + Pull-requests write on the infrastructure repo only, installed per app repo as needed) replaces creating a new personal access token for every application &mdash; the preferred model over a PAT-per-app. Registry pulls (GHCR) still use a separate, narrowly-scoped credential held by Komodo, unrelated to source-repo access.</p>
 
       </div>
     </div>
