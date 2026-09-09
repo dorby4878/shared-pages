@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agents VM Runbook</title>
+<meta name="description" content="Technical runbook for the Agents VM: Hermes agent isolation, the GBrain + Obsidian knowledge layer (four privacy-isolated brains, sub-profile access model), MCP wiring, isolation verification, and backup/restore.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#F3F4F1;
+  --surface:#FFFFFF;
+  --surface-2:#E9ECE7;
+  --line:#D9DCD4;
+  --ink:#1B211D;
+  --ink-soft:#54605A;
+  --ink-faint:#838F88;
+  --accent:#C9622A;
+  --accent-ink:#FFFFFF;
+  --good:#2F6F62;
+  --good-bg:#E3EFEA;
+  --warn:#96701E;
+  --warn-bg:#F5EBD3;
+  --crit:#A5393A;
+  --crit-bg:#F5E1DF;
+  --focus:#2F6F62;
+  --shadow: 0 1px 2px rgba(27,33,29,0.06), 0 8px 20px -12px rgba(27,33,29,0.18);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14181A; --surface:#1B2124; --surface-2:#212A2C; --line:#2B3436;
+    --ink:#E8EBE6; --ink-soft:#AAB3AD; --ink-faint:#71807A;
+    --accent:#E0824A; --accent-ink:#191008;
+    --good:#54AC98; --good-bg:#1B322C;
+    --warn:#D9A63E; --warn-bg:#3A2F14;
+    --crit:#E1837F; --crit-bg:#3A2020;
+    --focus:#54AC98;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14181A; --surface:#1B2124; --surface-2:#212A2C; --line:#2B3436;
+  --ink:#E8EBE6; --ink-soft:#AAB3AD; --ink-faint:#71807A;
+  --accent:#E0824A; --accent-ink:#191008;
+  --good:#54AC98; --good-bg:#1B322C;
+  --warn:#D9A63E; --warn-bg:#3A2F14;
+  --crit:#E1837F; --crit-bg:#3A2020;
+  --focus:#54AC98;
+  --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+}
+
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.mono,.pill,code,.qr-key,.qr-val,table,.meta,.scan-time{
+  font-family:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+h1,h2,h3{text-wrap:balance; margin:0;}
+a{color:var(--good);}
+::selection{background:var(--accent); color:var(--accent-ink);}
+:focus-visible{outline:2px solid var(--focus); outline-offset:2px;}
+@media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; scroll-behavior:auto !important;} }
+
+.skip-link{
+  position:absolute; left:-999px; top:auto;
+  background:var(--surface); color:var(--ink); padding:10px 16px;
+  border:1px solid var(--line); border-radius:6px; z-index:100;
+}
+.skip-link:focus{ left:16px; top:16px; }
+
+.wrap{max-width:1080px; margin:0 auto; padding:0 24px 96px;}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:sticky; top:0; z-index:20;
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);
+}
+.topbar-inner{
+  max-width:1080px; margin:0 auto; padding:14px 24px;
+  display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+}
+.topbar-left{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
+.brand{display:flex; align-items:baseline; gap:10px;}
+.brand .mark{width:10px; height:10px; border-radius:2px; background:var(--accent); display:inline-block; flex:none;}
+.brand-name{font-weight:600; font-size:15px; letter-spacing:0.01em;}
+.back-link{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:12.5px; color:var(--ink-soft); text-decoration:none;
+  border-bottom:1px solid transparent;
+}
+.back-link:hover, .back-link:focus-visible{color:var(--ink); border-color:var(--line);}
+nav.jump{display:flex; gap:16px; flex-wrap:wrap;}
+nav.jump a{
+  font-size:12px; color:var(--ink-soft); text-decoration:none;
+  letter-spacing:0.03em; text-transform:uppercase;
+  border-bottom:1px solid transparent; padding-bottom:2px;
+}
+nav.jump a:hover, nav.jump a:focus-visible{color:var(--ink); border-color:var(--line);}
+
+/* ---------- header ---------- */
+header.hero{padding:44px 0 20px;}
+.eyebrow{font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); font-weight:600; margin:0 0 10px;}
+h1.title{font-size:32px; font-weight:700; letter-spacing:-0.01em;}
+.hero-sub{color:var(--ink-soft); font-size:15.5px; margin-top:10px; max-width:70ch;}
+.scan-time{
+  display:inline-flex; align-items:flex-start; gap:8px; margin-top:18px;
+  font-size:12.5px; color:var(--ink-faint); background:var(--surface-2);
+  border:1px solid var(--line); padding:10px 14px; border-radius:5px; max-width:70ch;
+}
+.dot{width:7px;height:7px;border-radius:50%; background:var(--good); flex:none; margin-top:5px;}
+
+/* ---------- legend ---------- */
+.legend{
+  display:flex; gap:20px; flex-wrap:wrap; align-items:center;
+  margin:24px 0 8px; padding:14px 18px; border:1px solid var(--line); border-radius:8px; background:var(--surface);
+}
+.legend-item{display:flex; align-items:center; gap:8px; font-size:12.5px; color:var(--ink-soft);}
+
+/* ---------- pills ---------- */
+.pill{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:10.5px; font-weight:600; letter-spacing:0.03em;
+  padding:3px 9px; border-radius:99px; text-transform:uppercase; white-space:nowrap;
+}
+.pill.good{background:var(--good-bg); color:var(--good);}
+.pill.warn{background:var(--warn-bg); color:var(--warn);}
+.pill.crit{background:var(--crit-bg); color:var(--crit);}
+.pill.planned{background:transparent; border:1px dashed var(--ink-faint); color:var(--ink-faint);}
+.pill .dot{width:6px;height:6px; margin-top:0;}
+.pill.good .dot{background:var(--good);}
+.pill.warn .dot{background:var(--warn);}
+.pill.crit .dot{background:var(--crit);}
+
+/* ---------- sections / panels ---------- */
+section.host{margin-top:52px; scroll-margin-top:80px;}
+.panel{border:1px solid var(--line); border-radius:10px; background:var(--surface); box-shadow:var(--shadow); overflow:hidden;}
+.panel-head{
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  padding:18px 22px; border-bottom:1px solid var(--line); background:var(--surface-2);
+}
+.panel-head-left{display:flex; align-items:center; gap:12px;}
+.panel-head h2{font-size:18px; font-weight:700;}
+.panel-head .sub{color:var(--ink-faint); font-size:12.5px; margin-top:2px;}
+.panel-body{padding:22px;}
+.panel-body > * + *{margin-top:24px;}
+
+h3.block-title{
+  font-size:11.5px; text-transform:uppercase; letter-spacing:0.07em;
+  color:var(--ink-faint); font-weight:600; margin-bottom:12px;
+}
+p.lead{font-size:13.8px; color:var(--ink-soft); max-width:74ch; margin:0;}
+p.lead strong{color:var(--ink);}
+
+/* label/value grid */
+.kv{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:14px 22px;}
+.kv-item{display:flex; flex-direction:column; gap:3px;}
+.qr-key{font-size:11px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.05em;}
+.qr-val{font-size:14px; font-weight:500;}
+
+/* tables */
+.tbl-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:8px;}
+table{width:100%; border-collapse:collapse; font-size:12.6px; min-width:480px;}
+th{
+  text-align:left; font-weight:600; color:var(--ink-faint); font-size:11px;
+  letter-spacing:0.04em; text-transform:uppercase;
+  padding:9px 14px; background:var(--surface-2); border-bottom:1px solid var(--line);
+  white-space:nowrap;
+}
+td{padding:9px 14px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+td.dim{color:var(--ink-soft);}
+
+/* code / commands */
+.code{
+  background:var(--surface-2); border:1px solid var(--line); border-radius:7px;
+  padding:12px 14px; font-size:12.4px; overflow-x:auto; white-space:pre;
+  color:var(--ink); font-family:"IBM Plex Mono", ui-monospace, monospace;
+}
+.code .c{color:var(--ink-faint);}
+figure.snippet{margin:0;}
+figure.snippet figcaption{font-size:11.5px; color:var(--ink-faint); margin-bottom:6px;}
+
+/* callouts - used sparingly, only for genuine risk/operational hazards */
+.callout{
+  border:1px solid var(--line);
+  background:var(--surface-2); border-radius:8px;
+  padding:14px 16px; font-size:13.3px; color:var(--ink-soft);
+}
+.callout strong{color:var(--ink);}
+.callout.crit{border-color:color-mix(in srgb, var(--crit) 45%, var(--line));}
+.callout.warn{border-color:color-mix(in srgb, var(--warn) 45%, var(--line));}
+.callout.good{border-color:color-mix(in srgb, var(--good) 45%, var(--line));}
+
+/* ordered checklist / numbered steps */
+.steps{display:flex; flex-direction:column;}
+.step{
+  display:grid; grid-template-columns:26px 1fr; gap:14px; align-items:start;
+  padding:13px 0; border-bottom:1px solid var(--line);
+}
+.step:last-child{border-bottom:none;}
+.step .num{font-size:11px; color:var(--ink-faint); padding-top:2px;}
+.step .txt{font-size:13.6px; color:var(--ink-soft);}
+.step .txt strong{color:var(--ink); font-weight:600;}
+.step .txt code{font-size:12px; background:var(--surface-2); padding:1px 5px; border-radius:4px; border:1px solid var(--line);}
+
+/* ---------- trust/network diagram ---------- */
+.diagram{margin:0;}
+.diagram figcaption{font-size:11.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-faint); font-weight:600; margin-bottom:14px;}
+.flow{display:flex; align-items:stretch; gap:8px; flex-wrap:wrap;}
+.flow-node{
+  border:1px solid var(--line); border-radius:8px; background:var(--surface-2);
+  padding:10px 14px; font-size:12.5px; color:var(--ink); min-width:120px;
+  display:flex; flex-direction:column; justify-content:center; gap:2px;
+}
+.flow-node.accent{border-color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, var(--surface-2));}
+.flow-node.dim{color:var(--ink-soft);}
+.flow-sub{font-size:11px; color:var(--ink-faint); font-family:"IBM Plex Sans", sans-serif;}
+.flow-arrow{align-self:center; color:var(--ink-faint); font-size:16px; flex:none;}
+ol.flow-desc{
+  margin:16px 0 0; padding-left:20px; font-size:12.8px; color:var(--ink-soft);
+  display:flex; flex-direction:column; gap:4px;
+}
+ol.flow-desc li strong{color:var(--ink);}
+.diagram-note{font-size:12.8px; color:var(--ink-faint); max-width:74ch; margin-top:22px; padding-top:18px; border-top:1px solid var(--line);}
+.diagram-sep{margin:26px 0; border:none; border-top:1px solid var(--line);}
+
+/* matrix table with check/cross cells */
+.matrix td.yes{color:var(--good); font-weight:600;}
+.matrix td.no{color:var(--ink-faint);}
+
+footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-faint); font-size:12px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;}
+
+@media print{
+  .topbar{position:static; backdrop-filter:none;}
+  .skip-link{display:none;}
+  .panel{box-shadow:none; break-inside:avoid;}
+  section.host{break-inside:avoid-page;}
+}
+@media (max-width:640px){
+  h1.title{font-size:26px;}
+  .panel-head{flex-direction:column; align-items:flex-start;}
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-left">
+      <a class="back-link" href="index.html">&larr; Shared Pages</a>
+      <div class="brand"><span class="mark" aria-hidden="true"></span><span class="brand-name">Agents VM Runbook</span></div>
+    </div>
+    <nav class="jump" aria-label="Section jump links">
+      <a href="#overview">Overview</a>
+      <a href="#stack">Stack</a>
+      <a href="#isolation">Agent isolation</a>
+      <a href="#knowledge-layer">Knowledge layer</a>
+      <a href="#diagram">Brain map</a>
+      <a href="#access-matrix">Access matrix</a>
+      <a href="#sub-profiles">Sub-profiles</a>
+      <a href="#wiring">MCP &amp; secrets</a>
+      <a href="#concurrency">Concurrency</a>
+      <a href="#verification">Isolation proof</a>
+      <a href="#resources">Resources</a>
+      <a href="#backup">Backup</a>
+      <a href="#failure-modes">Failure modes</a>
+      <a href="#reference">Reference</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap" id="main">
+
+  <header class="hero">
+    <p class="eyebrow">Agents VM &middot; VMID 100 &middot; technical runbook</p>
+    <h1 class="title">Isolated Hermes agents, and the persistent knowledge layer underneath them</h1>
+    <p class="hero-sub">Four independent AI agents on one host, each with its own identity, credentials, and now its own long-term memory &mdash; enforced by filesystem and network boundaries, not by prompting. This page is the deep architectural reference; the <a href="homelab-runbook.html#host-agents">Home Lab Runbook</a> carries only this VM's summary card alongside the other three hosts.</p>
+    <div class="scan-time">
+      <span class="dot" aria-hidden="true"></span>
+      <span><strong>Source of truth / last verified:</strong> generated from the <code>homelab-agents</code> infrastructure-as-code repository, current through the <code>feature/gbrain&#8209;subprofiles</code> branch (2026&#8209;09&#8209;09). Treat conflicts in favor of re-checking the repo and the live VM, not this page.</span>
+    </div>
+  </header>
+
+  <div class="legend" role="note" aria-label="Status label legend">
+    <div class="legend-item"><span class="pill good"><span class="dot"></span>current</span> deployed and running today</div>
+    <div class="legend-item"><span class="pill planned">planned</span> designed, not yet built</div>
+  </div>
+
+  <!-- ============ OVERVIEW ============ -->
+  <section id="overview" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left">
+          <div><h2>VM overview</h2><div class="sub">Ubuntu 24.04 &middot; VMID 100</div></div>
+        </div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <div class="kv">
+          <div class="kv-item"><span class="qr-key">Guest OS</span><span class="qr-val">Ubuntu 24.04 LTS</span></div>
+          <div class="kv-item"><span class="qr-key">VMID</span><span class="qr-val">100</span></div>
+          <div class="kv-item"><span class="qr-key">CPU</span><span class="qr-val">8 cores</span></div>
+          <div class="kv-item"><span class="qr-key">Memory</span><span class="qr-val">16 GiB RAM</span></div>
+          <div class="kv-item"><span class="qr-key">Disk</span><span class="qr-val">200 GB (&asymp;39 GB used)</span></div>
+          <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">Dedicated AI-agent host &mdash; isolated Hermes containers, one shared speech-to-text service, four isolated knowledge brains</span></div>
+        </div>
+        <p class="lead">The <code>homelab-agents</code> repository is the infrastructure-as-code source of truth for this VM: the Docker Compose stack, per-agent sops-encrypted secrets, and the GBrain deployment definition this page documents. Every container is deployable with plain <code>docker compose up -d</code> over SSH &mdash; no orchestration layer sits between this repo and the running host.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ STACK ============ -->
+  <section id="stack" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Current stack inventory</h2><div class="sub">Nine containers, per the compose file</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th scope="col">Container</th><th scope="col">Image</th><th scope="col">Purpose</th></tr></thead>
+            <tbody>
+              <tr><td>hermes&#8209;1</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td class="dim">Dor's personal agent &middot; read&#8209;only household shared data</td></tr>
+              <tr><td>hermes&#8209;2</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td class="dim">Shaked's personal agent &middot; read&#8209;only household shared data &middot; multiplexes 3 named sub&#8209;profiles</td></tr>
+              <tr><td>hermes&#8209;3</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td class="dim">Shared/household agent &middot; read&#8209;write household data, own network, no personal vault</td></tr>
+              <tr><td>hermes&#8209;4</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td class="dim">Fourth, fully isolated agent &middot; no household access of any kind</td></tr>
+              <tr><td>whisper&#8209;ivrit</td><td class="dim">build: ./whisper&#8209;ivrit&#8209;svc</td><td class="dim">Shared Hebrew speech&#8209;to&#8209;text; network&#8209;reachable only from hermes&#8209;3</td></tr>
+              <tr><td>gbrain&#8209;dor</td><td class="dim">build: ./gbrain&#8209;svc</td><td class="dim">Dor's personal knowledge brain, HTTP MCP, internal&#8209;only network</td></tr>
+              <tr><td>gbrain&#8209;shaked</td><td class="dim">build: ./gbrain&#8209;svc</td><td class="dim">Shaked's personal knowledge brain, HTTP MCP, internal&#8209;only network</td></tr>
+              <tr><td>gbrain&#8209;shared</td><td class="dim">build: ./gbrain&#8209;svc</td><td class="dim">Household knowledge brain, HTTP MCP with per&#8209;caller scoped tokens</td></tr>
+              <tr><td>gbrain&#8209;hermes4</td><td class="dim">build: ./gbrain&#8209;svc</td><td class="dim">hermes&#8209;4's personal knowledge brain, HTTP MCP, internal&#8209;only network</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="lead">One reusable image (<code>gbrain&#8209;svc/</code>, pinned upstream GBrain version) backs all four brain services &mdash; same version, same build, four independent data directories and four independent internal networks. A pre-existing stale test container (<code>hello&#8209;world</code>, exited) is unrelated to any of this and remains a standing cleanup candidate noted in the Home Lab Runbook.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ AGENT ISOLATION ============ -->
+  <section id="isolation" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Agent isolation model</h2><div class="sub">The baseline every agent gets, independent of GBrain</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <p class="lead">Each Hermes container gets its own mode&#8209;restricted bind mount at a <code>&lt;per-agent state path&gt;</code> &mdash; not readable by the host's own primary account &mdash; plus, for hermes&#8209;1/hermes&#8209;2, a read&#8209;only view of a shared&#8209;data directory (currently empty). hermes&#8209;3 is the deliberate exception: read&#8209;write access to that shared data, and its own Docker network, which is also the only network <code>whisper&#8209;ivrit</code> joins &mdash; the seam that lets the household agent use shared speech&#8209;to&#8209;text without exposing it to the personal agents. hermes&#8209;4 has neither the shared&#8209;data mount nor any household network membership; a copy&#8209;paste leftover that briefly gave it the same read&#8209;only mount as hermes&#8209;1/hermes&#8209;2 was found and removed (the directory was empty throughout, so no data was ever exposed).</p>
+        <p class="lead">Named sub&#8209;profiles (hermes&#8209;2 runs three: <code>coder</code>, <code>hercules</code>, and <code>sdr</code>/&ldquo;Sudri&rdquo;, a Slack persona for a separate workspace; hermes&#8209;1 and hermes&#8209;4 each run a <code>coder</code> profile) are additional identities multiplexed inside the same container, each with its own state directory and no inheritance from the base profile's configuration &mdash; a fact that matters below, since the knowledge layer had to account for it.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ KNOWLEDGE LAYER INTRO ============ -->
+  <section id="knowledge-layer" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>GBrain + Obsidian knowledge layer</h2><div class="sub">Persistent, long-term memory &mdash; additive to each agent's existing skills and instructions</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <p class="lead">Every agent also gets a persistent knowledge brain (GBrain) and an Obsidian&#8209;compatible Markdown vault, layered on top of &mdash; and kept strictly separate from &mdash; each agent's pre-existing skills, instructions, and native short-term memory. Four distinct layers, deliberately not conflated:</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th scope="col">Layer</th><th scope="col">Answers</th><th scope="col">Touched by this project?</th></tr></thead>
+            <tbody>
+              <tr><td>Skills</td><td class="dim">How to operate a tool (GitHub, infra, automation)</td><td class="dim">No &mdash; untouched</td></tr>
+              <tr><td>Instructions</td><td class="dim">How to act (system prompt, operational rules)</td><td class="dim">No &mdash; untouched</td></tr>
+              <tr><td>Native agent memory</td><td class="dim">Operational state, preferences, session continuity</td><td class="dim">No &mdash; untouched</td></tr>
+              <tr><td>GBrain / Obsidian vault</td><td class="dim">Durable facts, decisions, people, projects &mdash; knowledge <em>about the world</em></td><td class="dim">Yes &mdash; new</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="lead" style="margin-top:14px;">No Obsidian desktop app runs on this VM. Each vault is a normal directory of Markdown files with YAML frontmatter, git&#8209;tracked, editable by opening the directory in Obsidian from any other machine &mdash; the server side only ever needs a filesystem, never the GUI.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BRAIN MAP DIAGRAM ============ -->
+  <section id="diagram" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Four brains, one deployment definition</h2><div class="sub">Shared software, never a shared database</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+
+        <figure class="diagram">
+          <figcaption>A personal brain (Dor's, Shaked's, or hermes&#8209;4's &mdash; identical shape for all three)</figcaption>
+          <div class="flow" role="group" aria-hidden="true">
+            <div class="flow-node">hermes&#8209;N<br><span class="flow-sub">base profile + every named sub&#8209;profile</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node accent">gbrain&#8209;N<br><span class="flow-sub">HTTP MCP, bearer token</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node dim">Vault + PGLite database<br><span class="flow-sub">on an internal&#8209;only network</span></div>
+          </div>
+          <ol class="flow-desc">
+            <li>Every profile in that one owner's container &mdash; the base identity and every named sub&#8209;profile &mdash; is a bearer&#8209;token HTTP client of that one owner's brain</li>
+            <li>The brain runs as one always&#8209;on service, on a network joined by nothing else</li>
+            <li>No other container, and no other owner's profile, can resolve that network's hostname at all</li>
+          </ol>
+        </figure>
+
+        <hr class="diagram-sep">
+
+        <figure class="diagram">
+          <figcaption>The household brain (the one exception with more than one legitimate caller)</figcaption>
+          <div class="flow" role="group" aria-hidden="true">
+            <div class="flow-node">hermes&#8209;1, hermes&#8209;2<br><span class="flow-sub">read&#8209;only bearer token</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node accent">gbrain&#8209;shared<br><span class="flow-sub">HTTP MCP, scoped tokens</span></div>
+            <span class="flow-arrow">&larr;</span>
+            <div class="flow-node">hermes&#8209;3<br><span class="flow-sub">read&#8209;write bearer token</span></div>
+          </div>
+          <ol class="flow-desc">
+            <li>hermes&#8209;3 owns this brain and the vault behind it &mdash; read&#8209;write</li>
+            <li>hermes&#8209;1 and hermes&#8209;2 hold a token scoped <code>read</code> only; a write attempt with it is rejected by the server (<code>insufficient_scope</code>), not merely discouraged</li>
+            <li>hermes&#8209;4 is on neither this network nor any mount of the underlying vault &mdash; it cannot even resolve the hostname</li>
+          </ol>
+        </figure>
+
+        <p class="diagram-note">Why the split: GBrain's own trust model treats a local process as always fully trusted, full read+write, no exceptions &mdash; enforcement only exists for remote/HTTP callers with a scoped token. Originally the three personal brains ran as local processes since each had exactly one caller. That stopped being safe to rely on once each container's named sub&#8209;profiles also needed the same personal brain: a single-writer embedded database can't have two independent local processes open at once, so all three were promoted to the same always&#8209;on HTTP pattern the household brain used from day one &mdash; see &ldquo;Concurrency&rdquo; below.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ACCESS MATRIX ============ -->
+  <section id="access-matrix" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Access matrix</h2><div class="sub">Enforced at the filesystem/network layer, not by prompting</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <div class="tbl-wrap">
+          <table class="matrix">
+            <thead><tr><th scope="col">Agent</th><th scope="col">Own brain</th><th scope="col">Household brain</th><th scope="col">Own vault</th><th scope="col">Household vault</th></tr></thead>
+            <tbody>
+              <tr><td>hermes&#8209;1 (Dor)</td><td class="yes">read&#8209;write</td><td class="yes">read&#8209;only</td><td class="yes">read&#8209;write</td><td class="yes">read&#8209;only</td></tr>
+              <tr><td>hermes&#8209;2 (Shaked)</td><td class="yes">read&#8209;write</td><td class="yes">read&#8209;only</td><td class="yes">read&#8209;write</td><td class="yes">read&#8209;only</td></tr>
+              <tr><td>hermes&#8209;3 (Shared)</td><td class="no">no personal brain</td><td class="yes">read&#8209;write (owner)</td><td class="no">no personal vault</td><td class="yes">read&#8209;write (owner)</td></tr>
+              <tr><td>hermes&#8209;4</td><td class="yes">read&#8209;write</td><td class="no">no path &mdash; no mount, no network, no token</td><td class="yes">read&#8209;write</td><td class="no">does not exist in this container</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="lead" style="margin-top:14px;">No personal agent can write the household brain directly &mdash; only hermes&#8209;3 holds a write&#8209;scoped token. No single database holds more than one owner's private knowledge. Every brain has its own persistent data directory; nothing is shared beyond the one reusable image that builds all four.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SUB-PROFILES ============ -->
+  <section id="sub-profiles" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Sub-profile access policy</h2><div class="sub">A same-owner decision, not a new privacy domain</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <p class="lead">Named sub&#8209;profiles were deliberately left out of the original rollout, flagged as an open decision. That decision: <strong>a sub&#8209;profile shares its parent identity's personal brain in full</strong> &mdash; not a separate brain, not read&#8209;only, not excluded. <code>coder</code> on hermes&#8209;1/2/4 is that owner using a different tool surface, not a different identity; <code>hercules</code> and <code>sdr</code> on hermes&#8209;2 are likewise treated as Shaked, not as separate privacy domains, and read/write the same brain as Shaked's base profile. No sub&#8209;profile has its own isolated brain, and none has ever been given access to a brain outside its own container's owner.</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th scope="col">Container</th><th scope="col">Sub-profiles</th><th scope="col">Brain access</th></tr></thead>
+            <tbody>
+              <tr><td>hermes&#8209;1</td><td class="dim"><code>coder</code></td><td class="dim">Shares gbrain&#8209;dor with the base profile</td></tr>
+              <tr><td>hermes&#8209;2</td><td class="dim"><code>coder</code>, <code>hercules</code>, <code>sdr</code></td><td class="dim">All three share gbrain&#8209;shaked with the base profile</td></tr>
+              <tr><td>hermes&#8209;4</td><td class="dim"><code>coder</code></td><td class="dim">Shares gbrain&#8209;hermes4 with the base profile</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MCP WIRING & SECRETS ============ -->
+  <section id="wiring" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>MCP wiring &amp; secrets</h2><div class="sub">HTTP everywhere now, one bearer token per owner</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <p class="lead">Every registration is HTTP, persisted per&#8209;profile in that profile's own configuration (base profile and every named sub&#8209;profile each hold a separate, non&#8209;inheriting config file). One <code>read,write</code>&#8209;scoped bearer token per owner &mdash; no read/write split needed, since every client of a personal brain <em>is</em> that owner in some interface &mdash; shared by every profile under that container. The household brain is the one case needing genuinely different scopes per caller, which is exactly what HTTP's scoped tokens are for and a local process's full&#8209;trust model can't express.</p>
+        <figure class="snippet">
+          <figcaption>Personal brain registration shape (identical pattern for dor/shaked/hermes4, only the hostname changes)</figcaption>
+          <div class="code">mcp_servers:
+  gbrain:
+    url: http://gbrain-&lt;owner&gt;:3131/mcp
+    headers:
+      Authorization: Bearer ${MCP_GBRAIN_API_KEY}
+    enabled: true</div>
+        </figure>
+        <p class="lead">Tokens are minted directly against each brain container, sops&#8209;encrypted per agent, and merged into that container's runtime environment at deploy time &mdash; never committed in plaintext, never logged. Token <em>values</em> are not disclosed here; only the wiring shape is.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CONCURRENCY ============ -->
+  <section id="concurrency" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Why HTTP, not a locally spawned process</h2><div class="sub">A single-writer database and what that forces</div></div></div>
+      </div>
+      <div class="panel-body">
+        <p class="lead">The brain's embedded database is single&#8209;writer, single&#8209;process: whichever process opens it first holds an exclusive lock for as long as it runs. A second independent process against the same data &mdash; even a brief admin command &mdash; fails on that lock rather than silently corrupting anything. That's a hard constraint, not a tuning knob, and it's the entire reason every brain with more than one legitimate concurrent caller runs as one always&#8209;on HTTP service instead of a process spawned fresh per caller. It's also why routine maintenance (minting a token, a one&#8209;off diagnostic command) briefly pauses that one brain's service rather than reaching into it while it's live &mdash; never two independent processes against the same data directory at once, regardless of transport.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ISOLATION PROOF ============ -->
+  <section id="verification" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Isolation &amp; functional verification</h2><div class="sub">Tested positive and negative, not assumed</div></div></div>
+        <span class="pill good"><span class="dot"></span>verified 2026&#8209;09&#8209;09</span>
+      </div>
+      <div class="panel-body">
+        <p class="lead">Every brain was proven to work (a test fact written, then recalled, then removed) and proven <em>not</em> to leak (every other agent's attempt to reach it checked and rejected) before being considered done &mdash; passing the positive test alone was never treated as sufficient.</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th scope="col">Check</th><th scope="col">Result</th></tr></thead>
+            <tbody>
+              <tr><td>Each personal brain: write, then recall from that same owner</td><td class="dim">Succeeded, all three</td></tr>
+              <tr><td>Each personal brain: recall attempted from a different owner's container</td><td class="dim">DNS resolution failure &mdash; no route exists, not merely refused</td></tr>
+              <tr><td>Household brain: write attempted with a read&#8209;only token</td><td class="dim">Rejected by the server (<code>insufficient_scope</code>)</td></tr>
+              <tr><td>hermes&#8209;4: any path to the household brain or either other personal brain</td><td class="dim">None &mdash; confirmed by DNS failure on all three</td></tr>
+              <tr><td>Every sub-profile: MCP connection to its parent's brain</td><td class="dim">Confirmed connected and tool catalog discovered</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout good"><strong>All test data was transient.</strong> Every verification fact was written, confirmed, then explicitly removed &mdash; nothing from this testing persists in any brain.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RESOURCES ============ -->
+  <section id="resources" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Resource footprint</h2><div class="sub">Measured before and after, not estimated</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <div class="kv">
+          <div class="kv-item"><span class="qr-key">Per brain service, idle</span><span class="qr-val">&asymp;280&ndash;315 MB RSS each</span></div>
+          <div class="kv-item"><span class="qr-key">Four brains combined</span><span class="qr-val">&asymp;1.1 GB RSS total</span></div>
+          <div class="kv-item"><span class="qr-key">Disk, net of this project</span><span class="qr-val">&asymp;5 GB at the original rollout; roughly flat since (data directories reused, not duplicated, by the later HTTP promotion)</span></div>
+          <div class="kv-item"><span class="qr-key">Swap</span><span class="qr-val">None observed at any point</span></div>
+        </div>
+        <p class="lead">No degradation observed in any pre&#8209;existing container's performance at any stage. Search runs in keyword&#8209;only mode today &mdash; no embedding provider key is configured for any of the four brains, so semantic search and automatic fact extraction are off; explicit remember/recall still works fully. This is the one part of GBrain's footprint that scales with real content and an embedding key, and was measured here at close to zero real content.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BACKUP ============ -->
+  <section id="backup" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Backup &amp; restore</h2><div class="sub">Nothing new to configure &mdash; covered by the whole-VM job</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <p class="lead">Every vault and every brain's data directory lives on the same VM disk already covered by the nightly Proxmox Backup Server job described in the <a href="homelab-runbook.html#backups">Home Lab Runbook</a> &mdash; nothing agent&#8209;specific was added to that schedule. The vault Markdown is the one irreplaceable piece; the brain's own database/index is rebuildable from the vault by design (that's the point of treating Markdown as the system of record).</p>
+        <div class="steps">
+          <div class="step"><div class="num">01</div><div class="txt">Restore VM100 from the whole-VM PBS job (see the Home Lab Runbook's restore steps &mdash; identical procedure, no agent-specific variant).</div></div>
+          <div class="step"><div class="num">02</div><div class="txt"><code>docker compose up -d</code> from the repo checkout recreates every container, including all four brain services, from the restored data directories &mdash; no reindex normally needed.</div></div>
+          <div class="step"><div class="num">03</div><div class="txt">If a brain's database directory alone is corrupt but its vault survived, that one brain can be reinitialized and resynced from its own vault &mdash; the database is a derived cache, not the source of truth.</div></div>
+          <div class="step"><div class="num">04</div><div class="txt">Re&#8209;run the isolation verification pattern above before resuming normal use.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FAILURE MODES ============ -->
+  <section id="failure-modes" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Known failure modes</h2><div class="sub">Gotchas already hit once &mdash; don't re-discover them</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="steps">
+          <div class="step"><div class="num">01</div><div class="txt"><strong>Two processes, one data directory, always fails.</strong> The embedded database is single&#8209;writer. A second independent process (a diagnostic command, a duplicate registration) against a brain that's already live fails on the lock instead of silently corrupting anything &mdash; expected, not a bug. Fix: never run a second process against a live brain's data directory; use the one already running.</div></div>
+          <div class="step"><div class="num">02</div><div class="txt"><strong>Named sub-profiles have their own configuration &mdash; no inheritance from the base profile.</strong> A fix applied to a container's base configuration does not reach its named sub&#8209;profiles; each one needs the same change applied to its own separate config independently. This bit an earlier, unrelated speech&#8209;to&#8209;text fix before it bit the knowledge&#8209;layer rollout &mdash; same root cause both times.</div></div>
+          <div class="step"><div class="num">03</div><div class="txt"><strong>Don't manually poke an individual profile's gateway service after boot.</strong> On container start, the main multiplexed process and each named profile's own standalone service both race for that profile's platform token; the main process is expected to win and absorb it. Manually nudging the standalone service well after boot can instead let it win that race and knock the main process's session offline. Recovery is a plain container restart, not further service-level intervention.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ REFERENCE ============ -->
+  <section id="reference" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><h2>Quick reference</h2></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+
+        <div>
+          <h3 class="block-title">Brain services (internal-only, no host port)</h3>
+          <div class="code">gbrain-dor       &#8594; hermes-1 (base + coder)
+gbrain-shaked    &#8594; hermes-2 (base + coder/hercules/sdr)
+gbrain-shared    &#8594; hermes-3 (owner, read-write) + hermes-1/hermes-2 (read-only)
+gbrain-hermes4   &#8594; hermes-4 (base + coder)</div>
+        </div>
+
+        <div>
+          <h3 class="block-title">Explicitly not public</h3>
+          <p class="lead">Every brain service is internal&#8209;only &mdash; no host port published, no public exposure, reachable only from its own owner's container(s) over an internal Docker network.</p>
+        </div>
+
+        <div>
+          <h3 class="block-title">IaC repo</h3>
+          <div class="code">homelab-agents   &#8594; VMID 100 (this VM)</div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Agents VM Runbook &middot; generated from the <code>homelab-agents</code> repository snapshot &mdash; may drift from the live VM</span>
+    <span><a href="index.html">&larr; Back to Shared Pages</a></span>
+  </footer>
+
+</div>
+</body>
+</html>
