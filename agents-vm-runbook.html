@@ -264,6 +264,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
       <a href="#isolation">Agent isolation</a>
       <a href="#knowledge-layer">Knowledge layer</a>
       <a href="#diagram">Brain map</a>
+      <a href="#message-flow">Message flow</a>
       <a href="#access-matrix">Access matrix</a>
       <a href="#sub-profiles">Sub-profiles</a>
       <a href="#wiring">MCP &amp; secrets</a>
@@ -429,6 +430,59 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
         </figure>
 
         <p class="diagram-note">Why the split: GBrain's own trust model treats a local process as always fully trusted, full read+write, no exceptions &mdash; enforcement only exists for remote/HTTP callers with a scoped token. Originally the three personal brains ran as local processes since each had exactly one caller. That stopped being safe to rely on once each container's named sub&#8209;profiles also needed the same personal brain: a single-writer embedded database can't have two independent local processes open at once, so all three were promoted to the same always&#8209;on HTTP pattern the household brain used from day one &mdash; see &ldquo;Concurrency&rdquo; below.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MESSAGE FLOW ============ -->
+  <section id="message-flow" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>How a message becomes a memory</h2><div class="sub">The runtime path, not just the architecture</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+
+        <figure class="diagram">
+          <figcaption>Proactive capture (no explicit instruction needed)</figcaption>
+          <div class="flow" role="group" aria-hidden="true">
+            <div class="flow-node">Message arrives</div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node accent">signal-detector<br><span class="flow-sub">runs on every message</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node">remember / put_page<br><span class="flow-sub">atomic fact, or richer page</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node dim">Vault .md file<br><span class="flow-sub">+ database index</span></div>
+          </div>
+          <ol class="flow-desc">
+            <li>A skill scaffolded into every profile watches every inbound message for durable facts, decisions, preferences, and commitments &mdash; not just messages that explicitly say &ldquo;remember this&rdquo;</li>
+            <li>A detected fact is written with <code>remember</code> (atomic, with provenance); something larger &mdash; a project, a person, a decision with context &mdash; is routed through <code>put_page</code> instead</li>
+            <li>The write lands in two places at once: a real Markdown file in the owner's vault (the durable, human&#8209;readable copy) and the brain's database (the fast&#8209;retrieval index over that same content)</li>
+            <li>Before the turn ends, the agent verifies the write actually landed &mdash; via <code>recall</code> or <code>get_page</code> &mdash; rather than assuming it did</li>
+          </ol>
+        </figure>
+
+        <hr class="diagram-sep">
+
+        <figure class="diagram">
+          <figcaption>Recall, in a later session</figcaption>
+          <div class="flow" role="group" aria-hidden="true">
+            <div class="flow-node">New conversation<br><span class="flow-sub">could be days later, different session</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node accent">recall / search</div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node dim">Answer, grounded in the stored fact</div>
+          </div>
+          <ol class="flow-desc">
+            <li>Nothing about recall depends on the original session still existing &mdash; the fact lives in the brain's database and the vault's Markdown, both independent of any one conversation</li>
+            <li>A restart of the Hermes container, the brain container, or the whole VM changes none of this &mdash; see &ldquo;Backup &amp; restore&rdquo; below</li>
+          </ol>
+        </figure>
+
+        <p class="diagram-note">Two capture paths exist deliberately: <code>capture</code> is the explicit one (&ldquo;remember this&rdquo;, &ldquo;save this thought&rdquo;) for when the user directs it; <code>signal-detector</code> is the ambient one that runs regardless, so knowledge doesn't depend on remembering to ask the agent to remember. Both write through the same <code>remember</code>/<code>put_page</code> primitives, so retrieval doesn't need to know which path a fact came from.</p>
+
+        <div class="callout"><strong>Isolation holds during this whole path, not just at rest.</strong> A write always lands in the calling profile's own brain &mdash; there is no code path where a fact learned in hermes&#8209;1 can be written to <code>gbrain&#8209;shaked</code>, because hermes&#8209;1 has no credential and no network route to it at all. Cross&#8209;owner access fails the same way whether it's attempted mid&#8209;conversation or from outside one entirely: a DNS resolution failure, not an authorization check that could be bypassed.</div>
+
       </div>
     </div>
   </section>
