@@ -292,7 +292,7 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
     <p class="eyebrow">Infrastructure reference &mdash; live-scanned</p>
     <h1 class="title">One NUC, three VMs, and what's actually running on them</h1>
     <p class="hero-sub">Physical layer, per-VM configuration, backup topology, and the open cleanup items &mdash; assembled by SSHing into every host rather than from notes.</p>
-    <div class="scan-time"><span class="dot"></span>Scanned 2026&#8209;09&#8209;05 &middot; 4 hosts online, 0 unreachable &middot; services section refreshed 2026&#8209;09&#8209;06</div>
+    <div class="scan-time"><span class="dot"></span>Scanned 2026&#8209;09&#8209;05 &middot; 4 hosts online, 0 unreachable &middot; services section refreshed 2026&#8209;09&#8209;06 &middot; agents section refreshed 2026&#8209;09&#8209;09 (deep architecture moved to the <a href="agents-vm-runbook.html">Agents VM Runbook</a>)</div>
   </header>
 
   <section id="topology" class="topo">
@@ -386,9 +386,9 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
       <div class="panel-body">
 
         <div class="kv">
-          <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">Dedicated AI-agent host &mdash; isolated Hermes containers</span></div>
-          <div class="kv-item"><span class="qr-key">Resources</span><span class="qr-val">8 cores &middot; 16 GiB RAM &middot; 200 GB disk (40 GB used)</span></div>
-          <div class="kv-item"><span class="qr-key">IaC repo</span><span class="qr-val">homelab&#8209;agents, branch <code>feature/gbrain&#8209;knowledge&#8209;layer</code></span></div>
+          <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">Dedicated AI-agent host &mdash; four isolated Hermes agents, each with its own persistent knowledge brain</span></div>
+          <div class="kv-item"><span class="qr-key">Resources</span><span class="qr-val">8 cores &middot; 16 GiB RAM &middot; 200 GB disk (39 GB used)</span></div>
+          <div class="kv-item"><span class="qr-key">IaC repo</span><span class="qr-val">homelab&#8209;agents, branch <code>feature/gbrain&#8209;subprofiles</code></span></div>
         </div>
 
         <div>
@@ -397,12 +397,12 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
             <table>
               <thead><tr><th>Container</th><th>Image</th><th>Status</th><th>Notes</th></tr></thead>
               <tbody>
-                <tr><td>hermes&#8209;1</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td><span class="pill good"><span class="dot"></span>up</span></td><td class="dim">Personal Hermes agent &middot; read&#8209;only shared data &middot; own GBrain (read&#8209;write) + read&#8209;only household GBrain</td></tr>
-                <tr><td>hermes&#8209;2</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td><span class="pill good"><span class="dot"></span>up</span></td><td class="dim">Personal Hermes agent &middot; read&#8209;only shared data &middot; own GBrain (read&#8209;write) + read&#8209;only household GBrain</td></tr>
-                <tr><td>hermes&#8209;3</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td><span class="pill good"><span class="dot"></span>up</span></td><td class="dim">Shared/household Hermes &middot; read&#8209;write shared data, own network &middot; read&#8209;write household GBrain, no personal brain</td></tr>
-                <tr><td>hermes&#8209;4</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td><span class="pill good"><span class="dot"></span>up</span></td><td class="dim">Additional isolated Hermes agent &middot; own GBrain only, no shared&#8209;data or household&#8209;GBrain access of any kind</td></tr>
-                <tr><td>whisper&#8209;ivrit</td><td class="dim">build: ./whisper&#8209;ivrit&#8209;svc</td><td><span class="pill good"><span class="dot"></span>healthy</span></td><td class="dim">Shared Hebrew speech&#8209;to&#8209;text; network&#8209;reachable only from hermes&#8209;3</td></tr>
-                <tr><td>gbrain&#8209;shared</td><td class="dim">build: ./gbrain&#8209;svc</td><td><span class="pill good"><span class="dot"></span>healthy</span></td><td class="dim">Household GBrain, served over HTTP MCP on an internal&#8209;only network; no host port published</td></tr>
+                <tr><td>hermes&#8209;1</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td><span class="pill good"><span class="dot"></span>up</span></td><td class="dim">Dor's personal agent &middot; read&#8209;only household shared data</td></tr>
+                <tr><td>hermes&#8209;2</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td><span class="pill good"><span class="dot"></span>up</span></td><td class="dim">Shaked's personal agent &middot; read&#8209;only household shared data &middot; 3 sub&#8209;profiles</td></tr>
+                <tr><td>hermes&#8209;3</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td><span class="pill good"><span class="dot"></span>up</span></td><td class="dim">Shared/household agent &middot; read&#8209;write shared data, own network</td></tr>
+                <tr><td>hermes&#8209;4</td><td class="dim">nousresearch/hermes&#8209;agent:latest</td><td><span class="pill good"><span class="dot"></span>up</span></td><td class="dim">Fourth, fully isolated agent</td></tr>
+                <tr><td>whisper&#8209;ivrit</td><td class="dim">build: ./whisper&#8209;ivrit&#8209;svc</td><td><span class="pill good"><span class="dot"></span>healthy</span></td><td class="dim">Shared Hebrew speech&#8209;to&#8209;text; reachable only from hermes&#8209;3</td></tr>
+                <tr><td>gbrain&#8209;dor / &#8209;shaked / &#8209;shared / &#8209;hermes4</td><td class="dim">build: ./gbrain&#8209;svc &times;4</td><td><span class="pill good"><span class="dot"></span>healthy</span></td><td class="dim">Four isolated knowledge brains, HTTP MCP, internal&#8209;only networks &mdash; see the Agents VM Runbook</td></tr>
                 <tr><td>gallant_shaw</td><td class="dim">hello&#8209;world</td><td><span class="pill warn"><span class="dot"></span>exited</span></td><td class="dim">Stale test container &mdash; cleanup candidate</td></tr>
               </tbody>
             </table>
@@ -411,8 +411,8 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
 
         <div>
           <h3 class="block-title">Isolation &amp; data</h3>
-          <p style="font-size:13.5px; color:var(--ink-soft); max-width:70ch;">Each Hermes container gets its own mode&#8209;restricted bind mount at a <code>&lt;per-agent state path&gt;</code>, not readable by the host's own primary account, plus a read&#8209;only view of a <code>&lt;shared data path&gt;</code> (currently empty). hermes&#8209;4 does not get that read&#8209;only shared&#8209;data mount &mdash; a copy&#8209;paste leftover was found and removed. hermes&#8209;3 is the exception: it gets read&#8209;write access to the shared data and its own Docker network, which is also the only network whisper&#8209;ivrit joins &mdash; that's the deliberate seam that lets the household agent use shared STT without exposing it to the personal agents.</p>
-          <p style="font-size:13.5px; color:var(--ink-soft); max-width:70ch; margin-top:8px;">Each agent also has a persistent GBrain (knowledge/memory) and an Obsidian&#8209;compatible Markdown vault, isolated the same way: hermes&#8209;1/hermes&#8209;2/hermes&#8209;4 each run their own local GBrain process against their own database &mdash; nobody else can reach it, by construction (no shared filesystem path, no shared network, no credential). The household brain is different: it's the one case with more than one legitimate reader at different permission levels, so it runs as a small always&#8209;on service on its own internal network, and hermes&#8209;1/hermes&#8209;2 hold a read&#8209;only token for it while hermes&#8209;3 holds read&#8209;write &mdash; verified with a scoped write attempt against the read&#8209;only token, which the server rejects (<code>insufficient_scope</code>). hermes&#8209;4 is not on that network at all; it can't even resolve the household brain's hostname.</p>
+          <p style="font-size:13.5px; color:var(--ink-soft); max-width:70ch;">Each Hermes container gets its own mode&#8209;restricted bind mount at a <code>&lt;per-agent state path&gt;</code>, not readable by the host's own primary account, plus a read&#8209;only view of a <code>&lt;shared data path&gt;</code> (currently empty). hermes&#8209;3 is the exception: it gets read&#8209;write access to the shared data and its own Docker network, which is also the only network whisper&#8209;ivrit joins &mdash; that's the deliberate seam that lets the household agent use shared STT without exposing it to the personal agents. hermes&#8209;4 has neither mount nor membership.</p>
+          <p style="font-size:13.5px; color:var(--ink-soft); max-width:70ch; margin-top:8px;">Each agent also has a persistent knowledge brain (GBrain) and an Obsidian&#8209;compatible Markdown vault, isolated the same way &mdash; four independent brains, enforced at the filesystem/network layer. Full architecture, access matrix, and isolation verification: <a href="agents-vm-runbook.html">Agents VM Runbook</a>.</p>
         </div>
 
         <div class="callout"><strong>&lt;manual backup path&gt;</strong> holds two manual snapshots (5.3 GB, taken 2026&#8209;08&#8209;31) from before the sops secret&#8209;encryption changes. No timer or cron job produces new ones &mdash; this was a one&#8209;off precaution, now superseded by the nightly whole&#8209;VM PBS backup.</div>
