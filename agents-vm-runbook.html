@@ -382,6 +382,11 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
           </table>
         </div>
         <p class="lead" style="margin-top:14px;">No Obsidian desktop app runs on this VM. Each vault is a normal directory of Markdown files with YAML frontmatter, git&#8209;tracked, editable by opening the directory in Obsidian from any other machine &mdash; the server side only ever needs a filesystem, never the GUI.</p>
+        <div class="kv" style="margin-top:14px;">
+          <div class="kv-item"><span class="qr-key">Retrieval</span><span class="qr-val">Semantic search, all four brains &mdash; OpenAI <code>text&#8209;embedding&#8209;3&#8209;small</code>, 1024 dimensions</span></div>
+          <div class="kv-item"><span class="qr-key">Search mode</span><span class="qr-val"><code>conservative</code> &mdash; no LLM query expansion, smallest retrieval payload</span></div>
+          <div class="kv-item"><span class="qr-key">Embedding key scope</span><span class="qr-val">One key, file&#8209;plane per brain (<code>~/.gbrain/config.json</code> on the VM) &mdash; never in the IaC repo</span></div>
+        </div>
       </div>
     </div>
   </section>
@@ -609,7 +614,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
           <div class="kv-item"><span class="qr-key">Disk, net of this project</span><span class="qr-val">&asymp;5 GB at the original rollout; roughly flat since (data directories reused, not duplicated, by the later HTTP promotion)</span></div>
           <div class="kv-item"><span class="qr-key">Swap</span><span class="qr-val">None observed at any point</span></div>
         </div>
-        <p class="lead">No degradation observed in any pre&#8209;existing container's performance at any stage. As of 2026&#8209;09&#8209;11, all four brains run real semantic search &mdash; OpenAI <code>text&#8209;embedding&#8209;3&#8209;small</code> (1024d), search mode <code>conservative</code> (no LLM query expansion, tightest/cheapest retrieval payload). Each brain's key lives only in its own file&#8209;plane <code>~/.gbrain/config.json</code> on the VM &mdash; never committed to the IaC repo. At this content volume (near&#8209;empty vaults, personal note&#8209;taking scale) the added cost is negligible &mdash; low cents/month, not the per&#8209;10K&#8209;query figures GBrain's own docs quote for high&#8209;volume product usage. This is the one part of GBrain's footprint that scales with real content and an embedding key, and was measured here at close to zero real content.</p>
+        <p class="lead">No degradation observed in any pre&#8209;existing container's performance at any stage. Embedding cost scales with real content and query volume; at this brain size (near&#8209;empty vaults, personal note&#8209;taking scale) it runs to low cents/month, well under the per&#8209;10K&#8209;query figures GBrain's own docs quote for high&#8209;volume product usage. See the knowledge&#8209;layer section above for the current retrieval configuration.</p>
       </div>
     </div>
   </section>
@@ -644,7 +649,6 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
           <div class="step"><div class="num">01</div><div class="txt"><strong>Two processes, one data directory, always fails.</strong> The embedded database is single&#8209;writer. A second independent process (a diagnostic command, a duplicate registration) against a brain that's already live fails on the lock instead of silently corrupting anything &mdash; expected, not a bug. Fix: never run a second process against a live brain's data directory; use the one already running.</div></div>
           <div class="step"><div class="num">02</div><div class="txt"><strong>Named sub-profiles have their own configuration &mdash; no inheritance from the base profile.</strong> A fix applied to a container's base configuration does not reach its named sub&#8209;profiles; each one needs the same change applied to its own separate config independently. This bit an earlier, unrelated speech&#8209;to&#8209;text fix before it bit the knowledge&#8209;layer rollout &mdash; same root cause both times.</div></div>
           <div class="step"><div class="num">03</div><div class="txt"><strong>Don't manually poke an individual profile's gateway service after boot.</strong> On container start, the main multiplexed process and each named profile's own standalone service both race for that profile's platform token; the main process is expected to win and absorb it. Manually nudging the standalone service well after boot can instead let it win that race and knock the main process's session offline. Recovery is a plain container restart, not further service-level intervention.</div></div>
-          <div class="step"><div class="num">04</div><div class="txt"><strong>Adding an embedding key alone does not turn semantic search on.</strong> All four brains were originally initialized with embeddings deferred entirely &mdash; not merely keyless. Setting the provider key is necessary but not sufficient; the embedding model itself is a schema&#8209;sizing choice the embedded database can't change in place, so switching providers means backing up and re&#8209;initializing each brain's database file, then re&#8209;registering its vault as a source (re&#8209;init drops source registration too). Fix path used successfully on all four: back up the database file, re&#8209;init with the target embedding model pinned, re&#8209;add the vault source and set it default, then resync.</div></div>
         </div>
       </div>
     </div>
