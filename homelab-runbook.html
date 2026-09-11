@@ -388,7 +388,7 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
         <div class="kv">
           <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">Dedicated AI-agent host &mdash; four isolated Hermes agents, each with its own persistent knowledge brain</span></div>
           <div class="kv-item"><span class="qr-key">Resources</span><span class="qr-val">8 cores &middot; 16 GiB RAM &middot; 200 GB disk (39 GB used)</span></div>
-          <div class="kv-item"><span class="qr-key">IaC repo</span><span class="qr-val">homelab&#8209;agents, branch <code>feature/gbrain&#8209;subprofiles</code></span></div>
+          <div class="kv-item"><span class="qr-key">IaC repo</span><span class="qr-val">homelab&#8209;agents, <code>main</code></span></div>
         </div>
 
         <div>
@@ -616,7 +616,7 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
           <div class="ledger-row"><div class="num">09</div><div class="txt"><strong>NOW has no application&#8209;level auth</strong> &middot; public and open to anyone with the URL since PR #13 removed Authentik from its path. Accepted risk until NOW ships its own signup/login.</div><div></div></div>
           <div class="ledger-row"><div class="num">10</div><div class="txt"><strong>Komodo/Uptime Kuma not yet behind Authentik</strong> &middot; still Tailscale&#8209;IP:port direct, per the target architecture in docs/ARCHITECTURE.md. Tracked as future work.</div><div></div></div>
           <div class="ledger-row"><div class="num">11</div><div class="txt"><strong>Resolved</strong> &middot; hermes&#8209;4 had inherited the same read&#8209;only household shared&#8209;data mount as hermes&#8209;1/hermes&#8209;2 (copy&#8209;paste leftover; directory was empty, no data exposure). Mount removed, homelab&#8209;agents PR #6 merged.</div><div></div></div>
-          <div class="ledger-row"><div class="num">12</div><div class="txt"><strong>GBrain search mode is keyword&#8209;only for now</strong> &middot; all four brains initialized without an embedding provider (no Voyage/OpenAI/Anthropic key configured). Semantic search and automatic fact extraction are off; explicit remember/recall still works. Revisit if/when a key is provisioned.</div><div></div></div>
+          <div class="ledger-row"><div class="num">12</div><div class="txt"><strong>Resolved</strong> &middot; all four GBrains now run semantic search (OpenAI <code>text&#8209;embedding&#8209;3&#8209;small</code>, conservative mode). See the <a href="agents-vm-runbook.html#knowledge-layer">Agents VM Runbook</a>.</div><div></div></div>
         </div>
       </div>
     </div>
