@@ -280,7 +280,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
     <p class="hero-sub">Edge, reverse proxy, identity, and admin access for the home lab's public-facing and internally-managed applications. Current behavior and proposed-but-not-built work are labeled separately throughout &mdash; nothing here should be read as implemented unless it's marked <strong>current</strong>.</p>
     <div class="scan-time">
       <span class="dot" aria-hidden="true"></span>
-      <span><strong>Source of truth / last verified:</strong> generated from the <code>homelab-stacks</code> infrastructure-as-code repository snapshot dated 2026&#8209;09&#8209;09 (compose files and <code>docs/</code>, including <code>docs/APP-ONBOARDING.md</code>). It can drift from what's actually running on the live VM &mdash; treat conflicts in favor of re-checking the repo and the VM itself, not this page.</span>
+      <span><strong>Source of truth / last verified:</strong> generated from the <code>homelab-stacks</code> infrastructure-as-code repository snapshot dated 2026&#8209;09&#8209;11 (compose files and <code>docs/</code>, including <code>docs/APP-ONBOARDING.md</code>), cross-checked against a real, live release (NOW <code>v0.1.1</code>) run through the full pipeline that day. It can drift from what's actually running on the live VM &mdash; treat conflicts in favor of re-checking the repo and the VM itself, not this page.</span>
     </div>
   </header>
 
@@ -557,7 +557,7 @@ docker logs caddy</div>
       </div>
       <div class="panel-body">
 
-        <p class="lead"><strong>Every app repo (NOW today, more to follow) carries a thin wrapper workflow calling reusable CI/release workflows in a dedicated <code>homelab-actions</code> repo</strong> &mdash; no per-app GitHub Actions boilerplate. Onboarding a new application (registry entry, generated compose file, Caddy/cloudflared config, Komodo Stack declaration) is itself a one-command, idempotent script in <code>homelab-stacks</code> &mdash; see the checklist below.</p>
+        <p class="lead"><strong>Every app repo (NOW today, more to follow) carries a thin wrapper workflow calling reusable CI/release workflows in a dedicated <code>homelab-actions</code> repo</strong> &mdash; no per-app GitHub Actions boilerplate. Onboarding a new application (registry entry, generated compose file, Caddy/cloudflared config, Komodo Stack declaration) is itself a one-command, idempotent script in <code>homelab-stacks</code> &mdash; see the checklist below. Validated end-to-end for real with NOW's <code>v0.1.1</code> release (2026&#8209;09&#8209;11): PR &rarr; CI &rarr; merge &rarr; tag &rarr; GHCR push &rarr; auto-opened bump PR &rarr; manual merge &rarr; manual Komodo Deploy &rarr; health verified. Not just designed &mdash; actually run.</p>
 
         <div class="flow" role="group" aria-hidden="true" style="margin-top:14px;">
           <div class="flow-node">PR</div>
@@ -577,7 +577,7 @@ docker logs caddy</div>
         <div class="flow" role="group" aria-hidden="true" style="margin-top:22px;">
           <div class="flow-node">Human merges<br><span class="flow-sub">bump PR</span></div>
           <span class="flow-arrow">&rarr;</span>
-          <div class="flow-node">Komodo ResourceSync<br><span class="flow-sub">config only &mdash; <code>deploy = false</code></span></div>
+          <div class="flow-node">Human refreshes Stack source<br><span class="flow-sub">Komodo UI, manual today</span></div>
           <span class="flow-arrow">&rarr;</span>
           <div class="flow-node accent">Human presses Deploy<br><span class="flow-sub">in the Komodo UI</span></div>
           <span class="flow-arrow">&rarr;</span>
@@ -585,9 +585,10 @@ docker logs caddy</div>
           <span class="flow-arrow">&rarr;</span>
           <div class="flow-node">Health verification</div>
         </div>
-        <p class="lead" style="margin-top:10px;"><strong>Pressing Deploy in Komodo is the only recurring manual production step, by design.</strong> An earlier design wired a GitHub push directly into a signed Komodo webhook listener for automatic redeployment &mdash; it was reverted from the infrastructure repo before ever being activated (no DNS/tunnel cutover happened, no GitHub webhook was ever registered) specifically to preserve this manual gate. Komodo's <code>ResourceSync</code> resource keeps its <em>stored</em> Stack configuration (the image tag to deploy) in sync with what's merged in git, either on its own poll interval or a manual "Execute Sync" &mdash; that alone never redeploys a running container. Rollback is the same shape in reverse: revert or open a new PR pointing at the previous immutable tag, merge, sync, press Deploy again. Komodo itself stays Tailscale-only throughout &mdash; none of this exposes its UI or API publicly.</p>
+        <p class="lead" style="margin-top:10px;"><strong>Pressing Deploy in Komodo is the only recurring manual production step, by design.</strong> An earlier design wired a GitHub push directly into a signed Komodo webhook listener for automatic redeployment &mdash; it was reverted from the infrastructure repo before ever being activated (no DNS/tunnel cutover happened, no GitHub webhook was ever registered) specifically to preserve this manual gate. Separately, the <code>now-app</code> Stack resource <em>inside Komodo itself</em> was found with its own "Webhook Enabled" and "Webhook Force Deploy" toggles switched on (leftover from earlier setup, predating this platform work) &mdash; inert the same way since nothing external ever called that URL, but explicitly switched off on 2026&#8209;09&#8209;11 regardless, since a live capability that contradicts the manual-only design is worth closing even when nothing currently exercises it.</p>
+        <p class="lead" style="margin-top:10px;">A Komodo <code>ResourceSync</code> resource that would surface a merged change as an automatic "pending diff" is designed (<code>komodo/resources/apps.sync.toml</code>, <code>deploy = false</code>) but <strong>not yet created</strong> &mdash; the one onboarding step still requiring a one-time manual bootstrap in the Komodo UI. Until then, checking for a new version is manual: refresh the Stack's source, then compare its Info tab's "File: compose.yaml" (latest from git) against "Deployed config" (what's actually running) &mdash; a tag mismatch between the two is the new version, staged and ready. Rollback is the same shape in reverse: revert or open a new PR pointing at the previous immutable tag, merge, refresh, press Deploy again. Komodo itself stays Tailscale-only throughout &mdash; none of this exposes its UI or API publicly.</p>
 
-        <p class="lead" style="margin-top:14px;"><strong>GitHub authentication:</strong> a single least-privilege GitHub App (repository-scoped Contents + Pull-requests write on the infrastructure repo only, installed per app repo as needed) replaces creating a new personal access token for every application &mdash; the preferred model over a PAT-per-app. Registry pulls (GHCR) still use a separate, narrowly-scoped credential held by Komodo, unrelated to source-repo access.</p>
+        <p class="lead" style="margin-top:14px;"><strong>GitHub authentication:</strong> a single least-privilege GitHub App, <code>homelab-platform-bot-dorby4878</code> (repository-scoped Contents + Pull-requests write, installed only on the infrastructure repo, nothing else), replaced creating a new personal access token for every application &mdash; live since 2026&#8209;09&#8209;11. Every app repo carries the same two secrets (the App's ID and private key); its release workflow mints its own short-lived installation token from them. Registry pulls (GHCR) still use a separate, narrowly-scoped credential held by Komodo, unrelated to source-repo access.</p>
 
       </div>
     </div>
