@@ -540,7 +540,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
     <div class="panel">
       <div class="panel-head">
         <div class="panel-head-left"><div><h2>Google Workspace (Gmail + Calendar)</h2><div class="sub">One dedicated identity for the three base agents, Gmail + Calendar scopes only</div></div></div>
-        <span class="pill warn"><span class="dot"></span>partially verified 2026&#8209;09&#8209;13</span>
+        <span class="pill good"><span class="dot"></span>verified 2026&#8209;09&#8209;13</span>
       </div>
       <div class="panel-body">
         <p class="lead">hermes&#8209;1, hermes&#8209;2, and hermes&#8209;3 (base profiles only) share Gmail and Calendar access through a single <strong>dedicated Google agent account</strong>, created solely for this purpose. There is exactly one Google OAuth authorization against that account &mdash; not one per agent &mdash; scoped to Gmail and Calendar only, never Drive, Docs, Sheets, or Contacts. Dor's and Shaked's personal Google accounts are never authenticated on this VM, and hermes&#8209;4 and every named sub&#8209;profile (<code>coder</code>, <code>hercules</code>, <code>sdr</code>) are explicitly excluded from this rollout.</p>
@@ -612,7 +612,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
               <tr><td>Independent auth check, all three base agents</td><td class="dim">Passed &mdash; each reads its own local credential</td></tr>
               <tr><td>Gmail metadata read (dedicated mailbox), all three</td><td class="dim">Passed</td></tr>
               <tr><td>Create + delete a test event on Dor's calendar, all three</td><td class="dim">Passed, test events removed afterward</td></tr>
-              <tr><td>Create + delete a test event on Shaked's calendar, all three</td><td class="dim">Pending &mdash; Shaked's calendar not yet shared with the dedicated account</td></tr>
+              <tr><td>Create + delete a test event on Shaked's calendar, all three</td><td class="dim">Passed, test events removed afterward</td></tr>
               <tr><td>Independent token refresh (one agent's refresh doesn't affect another's)</td><td class="dim">Passed &mdash; forced refresh on one agent left the other two unchanged</td></tr>
             </tbody>
           </table>
