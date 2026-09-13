@@ -267,6 +267,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
       <a href="#message-flow">Message flow</a>
       <a href="#access-matrix">Access matrix</a>
       <a href="#sub-profiles">Sub-profiles</a>
+      <a href="#google-workspace">Google Workspace</a>
       <a href="#wiring">MCP &amp; secrets</a>
       <a href="#concurrency">Concurrency</a>
       <a href="#verification">Isolation proof</a>
@@ -527,6 +528,92 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
               <tr><td>hermes&#8209;1</td><td class="dim"><code>coder</code></td><td class="dim">Shares gbrain&#8209;dor with the base profile</td></tr>
               <tr><td>hermes&#8209;2</td><td class="dim"><code>coder</code>, <code>hercules</code>, <code>sdr</code></td><td class="dim">All three share gbrain&#8209;shaked with the base profile</td></tr>
               <tr><td>hermes&#8209;4</td><td class="dim"><code>coder</code></td><td class="dim">Shares gbrain&#8209;hermes4 with the base profile</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GOOGLE WORKSPACE ============ -->
+  <section id="google-workspace" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Google Workspace (Gmail + Calendar)</h2><div class="sub">One dedicated identity for the three base agents, Gmail + Calendar scopes only</div></div></div>
+        <span class="pill warn"><span class="dot"></span>partially verified 2026&#8209;09&#8209;13</span>
+      </div>
+      <div class="panel-body">
+        <p class="lead">hermes&#8209;1, hermes&#8209;2, and hermes&#8209;3 (base profiles only) share Gmail and Calendar access through a single <strong>dedicated Google agent account</strong>, created solely for this purpose. There is exactly one Google OAuth authorization against that account &mdash; not one per agent &mdash; scoped to Gmail and Calendar only, never Drive, Docs, Sheets, or Contacts. Dor's and Shaked's personal Google accounts are never authenticated on this VM, and hermes&#8209;4 and every named sub&#8209;profile (<code>coder</code>, <code>hercules</code>, <code>sdr</code>) are explicitly excluded from this rollout.</p>
+
+        <figure class="diagram">
+          <figcaption>One authorization, three independent local copies</figcaption>
+          <div class="flow" role="group" aria-hidden="true">
+            <div class="flow-node accent">Dedicated Google agent account<br><span class="flow-sub">one OAuth authorization</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node">hermes&#8209;1 base<br><span class="flow-sub">own local credential copy</span></div>
+          </div>
+          <div class="flow" role="group" aria-hidden="true" style="margin-top:8px;">
+            <div class="flow-node dim" style="visibility:hidden;">spacer</div>
+            <span class="flow-arrow" style="visibility:hidden;">&rarr;</span>
+            <div class="flow-node">hermes&#8209;2 base<br><span class="flow-sub">own local credential copy</span></div>
+          </div>
+          <div class="flow" role="group" aria-hidden="true" style="margin-top:8px;">
+            <div class="flow-node dim" style="visibility:hidden;">spacer</div>
+            <span class="flow-arrow" style="visibility:hidden;">&rarr;</span>
+            <div class="flow-node">hermes&#8209;3 base<br><span class="flow-sub">own local credential copy</span></div>
+          </div>
+          <ol class="flow-desc">
+            <li>No new consent flow ran for hermes&#8209;2 or hermes&#8209;3 &mdash; each received its own physical copy of the same authorization's credential files</li>
+            <li>Copied, not shared or symlinked: Hermes automatically refreshes the OAuth access token and rewrites its local credential file when it does, so three concurrently&#8209;running processes sharing one physical file would race on that rewrite</li>
+            <li>Verified directly: forcing a refresh on one agent's copy left the other two agents' copies untouched and independently valid</li>
+          </ol>
+        </figure>
+
+        <hr class="diagram-sep">
+
+        <figure class="diagram">
+          <figcaption>Calendar trust boundary</figcaption>
+          <div class="flow" role="group" aria-hidden="true">
+            <div class="flow-node">Dor's personal calendar<br><span class="flow-sub">shares with, modify permission</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node accent">Dedicated agent identity</div>
+            <span class="flow-arrow">&larr;</span>
+            <div class="flow-node">Shaked's personal calendar<br><span class="flow-sub">shares with, modify permission</span></div>
+          </div>
+          <ol class="flow-desc">
+            <li>Each personal calendar is shared <em>to</em> the dedicated account via ordinary Google Calendar sharing &mdash; the personal accounts themselves are never authenticated on this VM</li>
+            <li>The dedicated account's own <code>primary</code> calendar is never used as a default destination for personal events &mdash; explicit calendar IDs are configured for Dor's and Shaked's calendars instead</li>
+            <li>A request for &ldquo;both calendars&rdquo; creates the same event independently on both, rather than one event with the other person merely added as an attendee</li>
+          </ol>
+        </figure>
+
+        <div class="tbl-wrap" style="margin-top:24px;">
+          <table class="matrix">
+            <thead><tr><th scope="col">Agent</th><th scope="col">Google access</th></tr></thead>
+            <tbody>
+              <tr><td>hermes&#8209;1 base (Dor)</td><td class="yes">Gmail (dedicated mailbox) + Dor/Shaked calendars</td></tr>
+              <tr><td>hermes&#8209;2 base (Shaked)</td><td class="yes">Gmail (dedicated mailbox) + Dor/Shaked calendars</td></tr>
+              <tr><td>hermes&#8209;3 base (Shared)</td><td class="yes">Gmail (dedicated mailbox) + Dor/Shaked calendars</td></tr>
+              <tr><td>hermes&#8209;4</td><td class="no">none</td></tr>
+              <tr><td><code>coder</code> profiles (hermes&#8209;1/2)</td><td class="no">not provisioned</td></tr>
+              <tr><td><code>hercules</code>, <code>sdr</code> (hermes&#8209;2)</td><td class="no">not provisioned</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <p class="lead" style="margin-top:14px;">Default calendar interpretation is per&#8209;agent: hermes&#8209;1 treats &ldquo;my calendar&rdquo; as Dor's; hermes&#8209;2 treats it as Shaked's; hermes&#8209;3, as the shared household agent, never infers a personal owner from &ldquo;my&rdquo; and asks when a request is ambiguous. All three honor an explicit request naming the other person, or both.</p>
+
+        <div class="callout"><strong>Credentials are never shared as one writable file.</strong> Each base agent's copy is sops&#8209;encrypted per agent in the <code>homelab-agents</code> repository (same pattern as its existing GBrain secrets) and deployed straight to that agent's own state directory with owner&#8209;only file permissions. Token values, the client secret, the dedicated account's address, and calendar IDs are never published here or committed in plaintext.</div>
+
+        <div class="tbl-wrap" style="margin-top:24px;">
+          <table>
+            <thead><tr><th scope="col">Check</th><th scope="col">Result</th></tr></thead>
+            <tbody>
+              <tr><td>Independent auth check, all three base agents</td><td class="dim">Passed &mdash; each reads its own local credential</td></tr>
+              <tr><td>Gmail metadata read (dedicated mailbox), all three</td><td class="dim">Passed</td></tr>
+              <tr><td>Create + delete a test event on Dor's calendar, all three</td><td class="dim">Passed, test events removed afterward</td></tr>
+              <tr><td>Create + delete a test event on Shaked's calendar, all three</td><td class="dim">Pending &mdash; Shaked's calendar not yet shared with the dedicated account</td></tr>
+              <tr><td>Independent token refresh (one agent's refresh doesn't affect another's)</td><td class="dim">Passed &mdash; forced refresh on one agent left the other two unchanged</td></tr>
             </tbody>
           </table>
         </div>
