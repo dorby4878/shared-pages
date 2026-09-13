@@ -265,6 +265,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
       <a href="#knowledge-layer">Knowledge layer</a>
       <a href="#diagram">Brain map</a>
       <a href="#message-flow">Message flow</a>
+      <a href="#model-router">Model router</a>
       <a href="#access-matrix">Access matrix</a>
       <a href="#sub-profiles">Sub-profiles</a>
       <a href="#google-workspace">Google Workspace</a>
@@ -287,7 +288,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
     <p class="hero-sub">Four independent AI agents on one host, each with its own identity, credentials, and now its own long-term memory &mdash; enforced by filesystem and network boundaries, not by prompting. This page is the deep architectural reference; the <a href="homelab-runbook.html#host-agents">Home Lab Runbook</a> carries only this VM's summary card alongside the other three hosts.</p>
     <div class="scan-time">
       <span class="dot" aria-hidden="true"></span>
-      <span><strong>Source of truth / last verified:</strong> generated from the <code>homelab-agents</code> infrastructure-as-code repository, current through <code>main</code> (2026&#8209;09&#8209;11, GBrain embeddings enablement). Treat conflicts in favor of re-checking the repo and the live VM, not this page.</span>
+      <span><strong>Source of truth / last verified:</strong> generated from the <code>homelab-agents</code> infrastructure-as-code repository, current through <code>main</code> (2026&#8209;09&#8209;13, model router added on hermes&#8209;1 and hermes&#8209;4). Treat conflicts in favor of re-checking the repo and the live VM, not this page.</span>
     </div>
   </header>
 
@@ -488,6 +489,57 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
         <p class="diagram-note">Two capture paths exist deliberately: <code>capture</code> is the explicit one (&ldquo;remember this&rdquo;, &ldquo;save this thought&rdquo;) for when the user directs it; <code>signal-detector</code> is the ambient one that runs regardless, so knowledge doesn't depend on remembering to ask the agent to remember. Both write through the same <code>remember</code>/<code>put_page</code> primitives, so retrieval doesn't need to know which path a fact came from.</p>
 
         <div class="callout"><strong>Isolation holds during this whole path, not just at rest.</strong> A write always lands in the calling profile's own brain &mdash; there is no code path where a fact learned in hermes&#8209;1 can be written to <code>gbrain&#8209;shaked</code>, because hermes&#8209;1 has no credential and no network route to it at all. Cross&#8209;owner access fails the same way whether it's attempted mid&#8209;conversation or from outside one entirely: a DNS resolution failure, not an authorization check that could be bypassed.</div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ MODEL ROUTER ============ -->
+  <section id="model-router" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Model router (Luna / Terra / Sol auto-routing)</h2><div class="sub">One ChatGPT subscription, three model tiers, chosen per turn &mdash; not per session</div></div></div>
+        <span class="pill good"><span class="dot"></span>current &mdash; hermes&#8209;1, hermes&#8209;4</span>
+      </div>
+      <div class="panel-body">
+
+        <p class="lead">Each base agent's primary model is normally fixed in <code>config.yaml</code> (<code>gpt&#8209;5.6&#8209;sol</code>, via the <code>openai&#8209;codex</code> ChatGPT OAuth provider &mdash; the same subscription every turn already used). The router is a small, local, deterministic add&#8209;on that instead picks <code>gpt&#8209;5.6&#8209;luna</code> / <code>&#8209;terra</code> / <code>&#8209;sol</code> fresh for every incoming turn, still on that same OAuth session &mdash; no OpenRouter, no second provider, no separate API key, and critically, no extra LLM call spent deciding.</p>
+
+        <figure class="diagram">
+          <figcaption>Per-turn path (unchanged everywhere except the model slug)</figcaption>
+          <div class="flow" role="group" aria-hidden="true">
+            <div class="flow-node">Message arrives</div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node accent">local classifier<br><span class="flow-sub">regex/structure only, zero network calls</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node">Luna / Terra / Sol<br><span class="flow-sub">picked before the agent is built</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node dim">Normal AIAgent, normal session_db<br><span class="flow-sub">same history, memory, tools, GBrain</span></div>
+          </div>
+          <ol class="flow-desc">
+            <li>Every base agent already reconstructs its <code>AIAgent</code> fresh for each turn, reloading full history from <code>session_db</code> by session id &mdash; the model slug was never coupled to memory, tools, or system prompt in the first place, so switching it per turn changes nothing else</li>
+            <li>A hard signal (code, a traceback, &ldquo;debug&rdquo;/&ldquo;troubleshoot&rdquo;, architecture/design language, infra modification, destructive ops, explicit deep&#8209;reasoning asks) forces Sol outright; a moderate signal (comparison, &ldquo;explain this config&rdquo;, document analysis) pushes to Terra; everything else defaults to Luna</li>
+            <li>A bare technical noun &mdash; docker, ssh, proxmox, linux, network &mdash; carries no weight on its own: &ldquo;list my Docker containers&rdquo; stays Luna, &ldquo;debug why this Docker container keeps restarting&rdquo; goes Sol. Subject and consequence are scored separately, on purpose</li>
+            <li>A short referential follow&#8209;up (&ldquo;continue&rdquo;, &ldquo;try again&rdquo;, &ldquo;do it&rdquo;, &ldquo;what about option 2&rdquo;) inherits the immediately preceding turn's tier for that session instead of being misclassified on three words alone &mdash; but a genuinely new, self&#8209;contained request is still classified independently, so switching topics doesn't drag a stale tier along</li>
+          </ol>
+        </figure>
+
+        <div class="callout"><strong>Verified live, not just unit&#8209;tested:</strong> a Luna turn established a fact mid&#8209;conversation; a Sol turn constructed fresh afterward, in the same session, correctly opened its answer by restating that fact &mdash; via the normal <code>session_db</code> history reload, no manual injection, no <code>delegate_task</code>, no subagent. The account&#8209;wide ChatGPT usage window (confirmed empirically: one shared 5&#8209;hour limit, not per&#8209;model) is the one thing routing cannot route around &mdash; if it's exhausted, all three tiers fail together, same as today.</div>
+
+        <p class="diagram-note">Master kill switch: <code>routing.enabled: false</code> in a container's <code>config.yaml</code> makes it behave exactly as before this feature existed, unconditionally. Per&#8209;session override reuses the existing <code>/model</code> command &mdash; <code>/model auto</code> re&#8209;enables routing, <code>/model luna</code>/<code>terra</code>/<code>sol</code> pins a tier and disables auto&#8209;routing until <code>/model auto</code> is sent again. Applies only to a container's base/default profile config &mdash; a named sub&#8209;profile (e.g. either base agent's <code>coder</code> profile) has its own separate config and is not routed by this rollout.</p>
+
+        <div class="tbl-wrap">
+          <table class="matrix">
+            <thead><tr><th scope="col">Agent</th><th scope="col">Router deployed</th><th scope="col">routing.mode</th></tr></thead>
+            <tbody>
+              <tr><td>hermes&#8209;1 (Dor)</td><td class="yes">yes</td><td class="dim">auto</td></tr>
+              <tr><td>hermes&#8209;4</td><td class="yes">yes</td><td class="dim">auto</td></tr>
+              <tr><td>hermes&#8209;2 (Shaked)</td><td class="no">not deployed</td><td class="dim">&mdash;</td></tr>
+              <tr><td>hermes&#8209;3 (Shared)</td><td class="no">not deployed</td><td class="dim">&mdash;</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="lead" style="margin-top:14px;">Implemented as an isolated add&#8209;on &mdash; two new files (<code>agent/model_router.py</code>, <code>agent/routing_config.py</code>) Hermes upstream will never touch, plus a small patch (~100 lines, two functions, one hook point already carrying the raw message but previously unused for model choice) to <code>gateway/run.py</code> and <code>gateway/slash_commands.py</code>. Full design, the exact patch, deploy/rollback scripts, and live&#8209;validation notes live in <code>homelab&#8209;agents</code> under <code>model&#8209;router/</code> and <code>docs/model&#8209;router.md</code>.</p>
 
       </div>
     </div>
