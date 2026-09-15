@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dev-Box Runbook</title>
+<meta name="description" content="Technical runbook for dev-box: a disposable Docker/Compose sandbox VM that the Claude Code instance inside a Hermes container can SSH into for pre-PR verification, isolated from Agents VM, Hermes, GBrain, Obsidian, and Services VM production workloads.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#F3F4F1;
+  --surface:#FFFFFF;
+  --surface-2:#E9ECE7;
+  --line:#D9DCD4;
+  --ink:#1B211D;
+  --ink-soft:#54605A;
+  --ink-faint:#838F88;
+  --accent:#C9622A;
+  --accent-ink:#FFFFFF;
+  --good:#2F6F62;
+  --good-bg:#E3EFEA;
+  --warn:#96701E;
+  --warn-bg:#F5EBD3;
+  --crit:#A5393A;
+  --crit-bg:#F5E1DF;
+  --focus:#2F6F62;
+  --shadow: 0 1px 2px rgba(27,33,29,0.06), 0 8px 20px -12px rgba(27,33,29,0.18);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14181A; --surface:#1B2124; --surface-2:#212A2C; --line:#2B3436;
+    --ink:#E8EBE6; --ink-soft:#AAB3AD; --ink-faint:#71807A;
+    --accent:#E0824A; --accent-ink:#191008;
+    --good:#54AC98; --good-bg:#1B322C;
+    --warn:#D9A63E; --warn-bg:#3A2F14;
+    --crit:#E1837F; --crit-bg:#3A2020;
+    --focus:#54AC98;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14181A; --surface:#1B2124; --surface-2:#212A2C; --line:#2B3436;
+  --ink:#E8EBE6; --ink-soft:#AAB3AD; --ink-faint:#71807A;
+  --accent:#E0824A; --accent-ink:#191008;
+  --good:#54AC98; --good-bg:#1B322C;
+  --warn:#D9A63E; --warn-bg:#3A2F14;
+  --crit:#E1837F; --crit-bg:#3A2020;
+  --focus:#54AC98;
+  --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+}
+
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.mono,.pill,code,.qr-key,.qr-val,table,.meta,.scan-time{
+  font-family:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+h1,h2,h3{text-wrap:balance; margin:0;}
+a{color:var(--good);}
+::selection{background:var(--accent); color:var(--accent-ink);}
+:focus-visible{outline:2px solid var(--focus); outline-offset:2px;}
+@media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; scroll-behavior:auto !important;} }
+
+.skip-link{
+  position:absolute; left:-999px; top:auto;
+  background:var(--surface); color:var(--ink); padding:10px 16px;
+  border:1px solid var(--line); border-radius:6px; z-index:100;
+}
+.skip-link:focus{ left:16px; top:16px; }
+
+.wrap{max-width:1080px; margin:0 auto; padding:0 24px 96px;}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:sticky; top:0; z-index:20;
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);
+}
+.topbar-inner{
+  max-width:1080px; margin:0 auto; padding:14px 24px;
+  display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+}
+.topbar-left{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
+.brand{display:flex; align-items:baseline; gap:10px;}
+.brand .mark{width:10px; height:10px; border-radius:2px; background:var(--accent); display:inline-block; flex:none;}
+.brand-name{font-weight:600; font-size:15px; letter-spacing:0.01em;}
+.back-link{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:12.5px; color:var(--ink-soft); text-decoration:none;
+  border-bottom:1px solid transparent;
+}
+.back-link:hover, .back-link:focus-visible{color:var(--ink); border-color:var(--line);}
+nav.jump{display:flex; gap:16px; flex-wrap:wrap;}
+nav.jump a{
+  font-size:12px; color:var(--ink-soft); text-decoration:none;
+  letter-spacing:0.03em; text-transform:uppercase;
+  border-bottom:1px solid transparent; padding-bottom:2px;
+}
+nav.jump a:hover, nav.jump a:focus-visible{color:var(--ink); border-color:var(--line);}
+
+/* ---------- header ---------- */
+header.hero{padding:44px 0 20px;}
+.eyebrow{font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); font-weight:600; margin:0 0 10px;}
+h1.title{font-size:32px; font-weight:700; letter-spacing:-0.01em;}
+.hero-sub{color:var(--ink-soft); font-size:15.5px; margin-top:10px; max-width:70ch;}
+.scan-time{
+  display:inline-flex; align-items:flex-start; gap:8px; margin-top:18px;
+  font-size:12.5px; color:var(--ink-faint); background:var(--surface-2);
+  border:1px solid var(--line); padding:10px 14px; border-radius:5px; max-width:70ch;
+}
+.dot{width:7px;height:7px;border-radius:50%; background:var(--good); flex:none; margin-top:5px;}
+
+/* ---------- pills ---------- */
+.pill{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:10.5px; font-weight:600; letter-spacing:0.03em;
+  padding:3px 9px; border-radius:99px; text-transform:uppercase; white-space:nowrap;
+}
+.pill.good{background:var(--good-bg); color:var(--good);}
+.pill.warn{background:var(--warn-bg); color:var(--warn);}
+.pill.crit{background:var(--crit-bg); color:var(--crit);}
+.pill .dot{width:6px;height:6px; margin-top:0;}
+.pill.good .dot{background:var(--good);}
+.pill.warn .dot{background:var(--warn);}
+.pill.crit .dot{background:var(--crit);}
+
+/* ---------- sections / panels ---------- */
+section.host{margin-top:52px; scroll-margin-top:80px;}
+.panel{border:1px solid var(--line); border-radius:10px; background:var(--surface); box-shadow:var(--shadow); overflow:hidden;}
+.panel-head{
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  padding:18px 22px; border-bottom:1px solid var(--line); background:var(--surface-2);
+}
+.panel-head-left{display:flex; align-items:center; gap:12px;}
+.panel-head h2{font-size:18px; font-weight:700;}
+.panel-head .sub{color:var(--ink-faint); font-size:12.5px; margin-top:2px;}
+.panel-body{padding:22px;}
+.panel-body > * + *{margin-top:24px;}
+
+h3.block-title{
+  font-size:11.5px; text-transform:uppercase; letter-spacing:0.07em;
+  color:var(--ink-faint); font-weight:600; margin-bottom:12px;
+}
+p.lead{font-size:13.8px; color:var(--ink-soft); max-width:74ch; margin:0;}
+p.lead strong{color:var(--ink);}
+
+/* label/value grid */
+.kv{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:14px 22px;}
+.kv-item{display:flex; flex-direction:column; gap:3px;}
+.qr-key{font-size:11px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.05em;}
+.qr-val{font-size:14px; font-weight:500;}
+
+/* tables */
+.tbl-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:8px;}
+table{width:100%; border-collapse:collapse; font-size:12.6px; min-width:480px;}
+th{
+  text-align:left; font-weight:600; color:var(--ink-faint); font-size:11px;
+  letter-spacing:0.04em; text-transform:uppercase;
+  padding:9px 14px; background:var(--surface-2); border-bottom:1px solid var(--line);
+  white-space:nowrap;
+}
+td{padding:9px 14px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+td.dim{color:var(--ink-soft);}
+
+/* code / commands */
+.code{
+  background:var(--surface-2); border:1px solid var(--line); border-radius:7px;
+  padding:12px 14px; font-size:12.4px; overflow-x:auto; white-space:pre;
+  color:var(--ink); font-family:"IBM Plex Mono", ui-monospace, monospace;
+}
+.code .c{color:var(--ink-faint);}
+
+/* callouts */
+.callout{
+  border:1px solid var(--line);
+  background:var(--surface-2); border-radius:8px;
+  padding:14px 16px; font-size:13.3px; color:var(--ink-soft);
+}
+.callout strong{color:var(--ink);}
+.callout.crit{border-color:color-mix(in srgb, var(--crit) 45%, var(--line));}
+.callout.warn{border-color:color-mix(in srgb, var(--warn) 45%, var(--line));}
+.callout.good{border-color:color-mix(in srgb, var(--good) 45%, var(--line));}
+
+/* ordered checklist / numbered steps */
+.steps{display:flex; flex-direction:column;}
+.step{
+  display:grid; grid-template-columns:26px 1fr; gap:14px; align-items:start;
+  padding:13px 0; border-bottom:1px solid var(--line);
+}
+.step:last-child{border-bottom:none;}
+.step .num{font-size:11px; color:var(--ink-faint); padding-top:2px;}
+.step .txt{font-size:13.6px; color:var(--ink-soft);}
+.step .txt strong{color:var(--ink); font-weight:600;}
+.step .txt code{font-size:12px; background:var(--surface-2); padding:1px 5px; border-radius:4px; border:1px solid var(--line);}
+
+/* ---------- flow diagram ---------- */
+.diagram{margin:0;}
+.diagram figcaption{font-size:11.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-faint); font-weight:600; margin-bottom:14px;}
+.flow{display:flex; align-items:stretch; gap:8px; flex-wrap:wrap;}
+.flow-node{
+  border:1px solid var(--line); border-radius:8px; background:var(--surface-2);
+  padding:10px 14px; font-size:12.5px; color:var(--ink); min-width:120px;
+  display:flex; flex-direction:column; justify-content:center; gap:2px;
+}
+.flow-node.accent{border-color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, var(--surface-2));}
+.flow-node.dim{color:var(--ink-soft);}
+.flow-sub{font-size:11px; color:var(--ink-faint); font-family:"IBM Plex Sans", sans-serif;}
+.flow-arrow{align-self:center; color:var(--ink-faint); font-size:16px; flex:none;}
+.diagram-note{font-size:12.8px; color:var(--ink-faint); max-width:74ch; margin-top:22px; padding-top:18px; border-top:1px solid var(--line);}
+
+footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-faint); font-size:12px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;}
+
+@media print{
+  .topbar{position:static; backdrop-filter:none;}
+  .skip-link{display:none;}
+  .panel{box-shadow:none; break-inside:avoid;}
+  section.host{break-inside:avoid-page;}
+}
+@media (max-width:640px){
+  h1.title{font-size:26px;}
+  .panel-head{flex-direction:column; align-items:flex-start;}
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-left">
+      <a class="back-link" href="index.html">&larr; Shared Pages</a>
+      <div class="brand"><span class="mark" aria-hidden="true"></span><span class="brand-name">Dev-Box Runbook</span></div>
+    </div>
+    <nav class="jump" aria-label="Section jump links">
+      <a href="#overview">Overview</a>
+      <a href="#purpose">Purpose</a>
+      <a href="#access">Access</a>
+      <a href="#user-docker">User &amp; Docker</a>
+      <a href="#workspace">Workspace</a>
+      <a href="#security">Security boundary</a>
+      <a href="#validation">Validation</a>
+      <a href="#snapshot">Snapshot</a>
+      <a href="#reference">Reference</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap" id="main">
+
+  <header class="hero">
+    <p class="eyebrow">Sandbox VM &middot; VMID 103 &middot; technical runbook</p>
+    <h1 class="title">A disposable box where an agent can break things on purpose</h1>
+    <p class="hero-sub">dev-box exists so the Claude Code instance running inside a Hermes container can provision, test, and destroy full application stacks &mdash; pre-PR verification &mdash; without ever touching the Agents VM, Hermes, the knowledge layer, or the Services VM's production workloads.</p>
+    <div class="scan-time">
+      <span class="dot" aria-hidden="true"></span>
+      <span><strong>Source of truth / last verified:</strong> provisioned and end-to-end validated 2026&#8209;09&#8209;16. Full internal runbook: <code>homelab-stacks</code> &rsaquo; <code>docs/DEV-BOX.md</code>. Treat conflicts in favor of re-checking that repo and the live VM, not this page.</span>
+    </div>
+  </header>
+
+  <!-- ============ OVERVIEW ============ -->
+  <section id="overview" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left">
+          <div><h2>VM overview</h2><div class="sub">Ubuntu 24.04 &middot; VMID 103</div></div>
+        </div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <div class="kv">
+          <div class="kv-item"><span class="qr-key">Guest OS</span><span class="qr-val">Ubuntu 24.04 LTS (cloud image + cloud-init)</span></div>
+          <div class="kv-item"><span class="qr-key">VMID</span><span class="qr-val">103</span></div>
+          <div class="kv-item"><span class="qr-key">CPU</span><span class="qr-val">2 cores</span></div>
+          <div class="kv-item"><span class="qr-key">Memory</span><span class="qr-val">4 GiB (balloon min 2 GiB)</span></div>
+          <div class="kv-item"><span class="qr-key">Disk</span><span class="qr-val">60 GB, thin&#8209;provisioned</span></div>
+          <div class="kv-item"><span class="qr-key">Network</span><span class="qr-val">static LAN IP &middot; SSH only, LAN&#8209;scoped</span></div>
+          <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">Disposable Docker/Compose sandbox for pre&#8209;PR application verification</span></div>
+          <div class="kv-item"><span class="qr-key">Autostart</span><span class="qr-val">off &mdash; started on demand</span></div>
+        </div>
+        <div class="callout warn"><strong>Sized below the original 6&ndash;8 GiB target.</strong> The hypervisor had very little free physical RAM at provisioning time (see the <a href="homelab-runbook.html#host-pve01">Home Lab Runbook</a>'s pve01 section). A small, reversible memory reduction on the Services VM's balloon target freed enough headroom to fit dev-box safely, without touching any production application stack. Heavy multi&#8209;service verification runs may need to go one at a time rather than in parallel until the host has more free RAM.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PURPOSE ============ -->
+  <section id="purpose" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Purpose &amp; architecture</h2><div class="sub">One more hop, one more isolation boundary</div></div></div>
+      </div>
+      <div class="panel-body">
+        <p class="lead">Before this existed, there was no safe place for an agent to run <code>docker compose up</code> against arbitrary candidate code. dev-box is that place: a throwaway sandbox reachable only by the specific Hermes agent that needs it, with no path back into anything that matters.</p>
+        <figure class="diagram">
+          <figcaption>Trust &amp; network boundary</figcaption>
+          <div class="flow">
+            <div class="flow-node dim">Proxmox host<span class="flow-sub">hypervisor</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node">Agents VM<span class="flow-sub">Hermes containers</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node">Hermes container<span class="flow-sub">inner Claude Code</span></div>
+            <span class="flow-arrow">&rarr;</span>
+            <div class="flow-node accent">dev-box (VMID 103)<span class="flow-sub">SSH &middot; Docker &middot; Compose</span></div>
+          </div>
+          <p class="diagram-note">The Services VM (production) sits alongside dev-box as a sibling VM on the same hypervisor &mdash; not in this path at all. dev-box has no credentials or network route into it, into Proxmox itself, or into the Agents VM's Docker daemon.</p>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ACCESS ============ -->
+  <section id="access" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Access architecture</h2><div class="sub">Two separate SSH paths, by design</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="steps">
+          <div class="step"><div class="num">01</div><div class="txt"><strong>Admin (human) access</strong> &mdash; a personal key, same convention used for the other VMs on this host. Not used by any agent.</div></div>
+          <div class="step"><div class="num">02</div><div class="txt"><strong>Hermes Claude Code &rarr; dev-box</strong> (the automated path) &mdash; a dedicated ed25519 keypair generated <em>inside</em> the Hermes container's own persistent state directory (<code>&lt;per-agent state path&gt;/.ssh/</code> &mdash; the same isolated, mode&#8209;restricted location described in the <a href="agents-vm-runbook.html#isolation">Agents VM Runbook</a>'s agent&#8209;isolation model). The keypair never left the container; only its public half was installed on dev-box. Survives container restarts because that directory is bind&#8209;mounted persistent storage, not container&#8209;ephemeral.</div></div>
+        </div>
+        <div>
+          <h3 class="block-title">SSH alias (inside the Hermes container)</h3>
+          <div class="code">Host dev-box
+    HostName    &lt;dev-box static LAN IP&gt;
+    User        claude-verifier
+    IdentityFile &lt;per-agent state path&gt;/.ssh/dev-box_ed25519
+    IdentitiesOnly yes
+    UserKnownHostsFile &lt;per-agent state path&gt;/.ssh/known_hosts
+    StrictHostKeyChecking yes</div>
+        </div>
+        <p class="lead">Host&#8209;key verification is enforced, not skipped: dev-box's host key was captured via <code>ssh&#8209;keyscan</code> from <em>inside</em> the Hermes container (the exact path Hermes actually uses) and cross&#8209;checked byte&#8209;for&#8209;byte against the key dev-box itself presents, before being trusted. <code>StrictHostHostChecking no</code> is never configured.</p>
+        <div class="callout warn"><strong>Gotcha hit and fixed during setup:</strong> writing into the container's <code>.ssh</code> directory as the container's default (root) user creates root&#8209;owned files that the actual agent process &mdash; which runs as an unprivileged in&#8209;container user &mdash; cannot read. The symptom looks like a DNS failure (&ldquo;could not resolve hostname dev&#8209;box&rdquo;), not a permissions error, because SSH silently ignores a config file it can't open. Fix: always write as that unprivileged user, or <code>chown</code> the directory back to it afterward. Also noted in the <a href="agents-vm-runbook.html#failure-modes">Agents VM Runbook</a>'s failure modes.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ USER & DOCKER ============ -->
+  <section id="user-docker" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2><code>claude-verifier</code> &amp; Docker</h2><div class="sub">Scoped authority, nothing that reaches off this box</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <div class="kv">
+          <div class="kv-item"><span class="qr-key">Login</span><span class="qr-val">key&#8209;only; password login locked</span></div>
+          <div class="kv-item"><span class="qr-key">Docker access</span><span class="qr-val">member of the <code>docker</code> group &mdash; no sudo needed, scoped to this VM only</span></div>
+          <div class="kv-item"><span class="qr-key">sudo</span><span class="qr-val">none</span></div>
+          <div class="kv-item"><span class="qr-key">Reach off this box</span><span class="qr-val">none &mdash; no SSH key to Proxmox or any other VM</span></div>
+        </div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Component</th><th>Version</th></tr></thead>
+            <tbody>
+              <tr><td>Docker Engine</td><td class="dim">29.8.1, official apt repo (not the convenience script)</td></tr>
+              <tr><td>Docker Compose plugin</td><td class="dim">v5.5.1</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="lead">Only the local Unix socket is used &mdash; no remote Docker TCP API is exposed, authenticated or not.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ WORKSPACE ============ -->
+  <section id="workspace" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Verification workspace</h2><div class="sub">Every run is disposable; nothing here is a source of truth</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="code">/srv/prepr/runs/&lt;repo&gt;-&lt;short-sha&gt;-&lt;run-id&gt;/   <span class="c"># one dir per run</span>
+/srv/prepr/artifacts/                          <span class="c"># logs/screenshots worth keeping</span></div>
+        <p class="lead">Compose projects use <code>-p prepr-&lt;repo&gt;-&lt;shortsha&gt;-&lt;runid&gt;</code> so concurrent or successive runs never collide. Cleanup is <code>docker compose -p &lt;project&gt; down -v</code> from the run directory, then deleting the directory &mdash; no global Docker cleanup required, and unrelated resources are never touched.</p>
+        <div>
+          <h3 class="block-title">Candidate source transfer</h3>
+          <p class="lead" style="margin-bottom:10px;">No GitHub credentials live on dev-box. The exact candidate commit is packaged and streamed over the same SSH connection already in use:</p>
+          <div class="code">git archive &lt;candidate-sha&gt; | ssh dev-box 'mkdir -p &lt;run-dir&gt; &amp;&amp; tar -x -C &lt;run-dir&gt;'</div>
+        </div>
+        <div>
+          <h3 class="block-title">Temporary test secrets</h3>
+          <p class="lead">Dropped into a single run directory with <code>chmod 600</code>, deleted on cleanup. Production <code>.env</code> files are never copied wholesale, and no production credential is ever written to this box.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SECURITY BOUNDARY ============ -->
+  <section id="security" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Security boundary</h2><div class="sub">Broad control inside the box, none of it leaks outward</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Boundary</th><th>State</th></tr></thead>
+            <tbody>
+              <tr><td>Inbound firewall</td><td class="dim">default deny; SSH (22/tcp) allowed only from the homelab LAN &mdash; not internet&#8209;reachable, no port forwarded</td></tr>
+              <tr><td>Production secrets on dev-box</td><td class="dim">none</td></tr>
+              <tr><td>Hermes GitHub token on dev-box</td><td class="dim">not copied</td></tr>
+              <tr><td>dev-box &rarr; Proxmox / PBS / Services VM</td><td class="dim">no SSH access</td></tr>
+              <tr><td>dev-box &rarr; Agents VM Docker daemon</td><td class="dim">no access</td></tr>
+              <tr><td>Hermes containers &rarr; Agents VM Docker socket</td><td class="dim">not mounted &mdash; re&#8209;verified across every Hermes container while building this</td></tr>
+              <tr><td>Hermes containers, privileged mode</td><td class="dim">none, on any of them</td></tr>
+              <tr><td>Hermes model router</td><td class="dim">untouched by this work</td></tr>
+              <tr><td>Services VM production stacks</td><td class="dim">untouched by this work</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VALIDATION ============ -->
+  <section id="validation" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>End-to-end validation</h2><div class="sub">Tested through the real path, not from the admin box</div></div></div>
+        <span class="pill good"><span class="dot"></span>verified 2026&#8209;09&#8209;16</span>
+      </div>
+      <div class="panel-body">
+        <p class="lead">Every check below ran <em>from inside the Hermes container</em>, as the same unprivileged user the agent actually runs as &mdash; not from an admin session, which would only prove the human's own access works.</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Check</th><th>Result</th></tr></thead>
+            <tbody>
+              <tr><td>Hermes container &rarr; SSH to dev-box, identity check</td><td class="dim">PASS &mdash; resolves to <code>claude-verifier</code></td></tr>
+              <tr><td>Remote Docker Engine reachable &amp; working</td><td class="dim">PASS &mdash; 29.8.1</td></tr>
+              <tr><td>Remote Compose plugin reachable &amp; working</td><td class="dim">PASS &mdash; v5.5.1</td></tr>
+              <tr><td>Disposable test stack (HTTP service + dependent service): config, pull, start, healthcheck</td><td class="dim">PASS &mdash; both services healthy</td></tr>
+              <tr><td>Local reachability + log inspection from <code>claude-verifier</code></td><td class="dim">PASS &mdash; HTTP 200, logs readable</td></tr>
+              <tr><td>Teardown: containers, network, volumes removed</td><td class="dim">PASS &mdash; nothing left behind, no unrelated resources touched</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SNAPSHOT ============ -->
+  <section id="snapshot" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Snapshot</h2><div class="sub">A known-clean restore point</div></div></div>
+      </div>
+      <div class="panel-body">
+        <p class="lead">A Proxmox snapshot named <code>devbox&#8209;prepr&#8209;ready</code> was taken once the VM was fully configured and validated end&#8209;to&#8209;end &mdash; base OS, Docker, <code>claude-verifier</code>, workspace, firewall, all confirmed working. Roll back to it any time dev-box's disk state drifts from a clean baseline.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ REFERENCE ============ -->
+  <section id="reference" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><h2>Quick reference</h2></div>
+      </div>
+      <div class="panel-body">
+        <div class="kv">
+          <div class="kv-item"><span class="qr-key">SSH (admin)</span><span class="qr-val">static LAN IP, personal key</span></div>
+          <div class="kv-item"><span class="qr-key">SSH (Hermes automation)</span><span class="qr-val">alias <code>dev-box</code>, dedicated key, host&#8209;key pinned</span></div>
+          <div class="kv-item"><span class="qr-key">Internal runbook</span><span class="qr-val"><code>homelab-stacks</code> &rsaquo; <code>docs/DEV-BOX.md</code></span></div>
+          <div class="kv-item"><span class="qr-key">Autostart on host reboot</span><span class="qr-val">off &mdash; start manually</span></div>
+        </div>
+        <div class="callout"><strong>Known limitations:</strong> RAM is tighter than the original target due to current host memory pressure (see the <a href="homelab-runbook.html#host-pve01">Home Lab Runbook</a>); Tailscale was deliberately skipped since plain LAN reachability from Hermes was verified and sufficient; dev-box does not auto&#8209;start after a host reboot.</div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Dev-Box Runbook &middot; disposable by design</span>
+    <span><a href="homelab-runbook.html">Home Lab Runbook</a> &middot; <a href="agents-vm-runbook.html">Agents VM Runbook</a></span>
+  </footer>
+
+</div>
+</body>
+</html>

@@ -279,6 +279,7 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
       <a href="#host-agents">Agents</a>
       <a href="#host-services">Services</a>
       <a href="#host-pbs">PBS</a>
+      <a href="#host-devbox">Dev-Box</a>
       <a href="#backups">Backups</a>
       <a href="#cleanup">Cleanup</a>
       <a href="#reference">Reference</a>
@@ -292,7 +293,7 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
     <p class="eyebrow">Infrastructure reference &mdash; live-scanned</p>
     <h1 class="title">One NUC, three VMs, and what's actually running on them</h1>
     <p class="hero-sub">Physical layer, per-VM configuration, backup topology, and the open cleanup items &mdash; assembled by SSHing into every host rather than from notes.</p>
-    <div class="scan-time"><span class="dot"></span>Scanned 2026&#8209;09&#8209;05 &middot; 4 hosts online, 0 unreachable &middot; services section refreshed 2026&#8209;09&#8209;06 &middot; agents section refreshed 2026&#8209;09&#8209;09 (deep architecture moved to the <a href="agents-vm-runbook.html">Agents VM Runbook</a>)</div>
+    <div class="scan-time"><span class="dot"></span>Scanned 2026&#8209;09&#8209;05 &middot; services section refreshed 2026&#8209;09&#8209;06 &middot; agents section refreshed 2026&#8209;09&#8209;09 (deep architecture moved to the <a href="agents-vm-runbook.html">Agents VM Runbook</a>) &middot; dev-box (VMID 103) added 2026&#8209;09&#8209;16, now 4 hosts online, 0 unreachable (deep reference: <a href="dev-box-runbook.html">Dev-Box Runbook</a>)</div>
   </header>
 
   <section id="topology" class="topo">
@@ -323,6 +324,12 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
           <div class="role">Proxmox Backup Server</div>
           <div class="ip">static LAN IP &middot; key-based SSH</div>
         </div>
+        <div class="topo-node">
+          <div class="vmid">VMID 103</div>
+          <div class="name">dev-box</div>
+          <div class="role">Disposable Docker/Compose sandbox</div>
+          <div class="ip">static LAN IP &middot; key-based SSH, LAN&#8209;scoped only</div>
+        </div>
       </div>
     </div>
   </section>
@@ -337,16 +344,17 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
             <div class="sub">Proxmox VE 9.2.2 &middot; kernel 7.0.2&#8209;6&#8209;pve</div>
           </div>
         </div>
-        <span class="pill warn"><span class="dot"></span>32G allocated / 30G physical</span>
+        <span class="pill crit"><span class="dot"></span>36G configured / ~30G physical &middot; ~1&#8209;3G free</span>
       </div>
       <div class="panel-body">
 
         <div>
           <h3 class="block-title">Compute &amp; network</h3>
           <div class="kv">
-            <div class="kv-item"><span class="qr-key">CPU</span><span class="qr-val">16 cores</span></div>
-            <div class="kv-item"><span class="qr-key">Memory (physical)</span><span class="qr-val">30 GiB, 21 GiB in use</span></div>
-            <div class="kv-item"><span class="qr-key">Memory (allocated to VMs)</span><span class="qr-val">32 GiB &mdash; 8+6+2 cores, 16+12+4 GiB</span></div>
+            <div class="kv-item"><span class="qr-key">CPU</span><span class="qr-val">16 cores &middot; 18 allocated (8+6+2+2)</span></div>
+            <div class="kv-item"><span class="qr-key">Memory (physical)</span><span class="qr-val">&asymp;30 GiB</span></div>
+            <div class="kv-item"><span class="qr-key">Memory (configured max)</span><span class="qr-val">36 GiB &mdash; agents 16 + services 12 + pbs 4 + dev&#8209;box 4</span></div>
+            <div class="kv-item"><span class="qr-key">Memory (live balloon targets)</span><span class="qr-val">agents 16, services 11 (reduced from 12 to fit dev&#8209;box), pbs 4, dev&#8209;box 2&ndash;4</span></div>
             <div class="kv-item"><span class="qr-key">Bridge</span><span class="qr-val">vmbr0 &middot; single /24 LAN, static addressing</span></div>
           </div>
         </div>
@@ -365,7 +373,7 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
           </div>
         </div>
 
-        <div class="callout warn"><strong>32 GiB allocated across VMs vs. 30 GiB physical RAM.</strong> No memory pressure observed yet (ballooning / not all VMs peak simultaneously), but there's no headroom left for a fourth VM without either trimming an existing allocation or adding RAM.</div>
+        <div class="callout crit"><strong>Real memory pressure now, not just a theoretical overcommit.</strong> Adding dev-box (VMID 103) as a fourth VM required live-ballooning the Services VM down from a 12 GiB to an 11 GiB target (reversible, no restart, done with headroom above its actual usage) to free enough physical RAM. With all four VMs running, free physical memory sits in the low single digits of GiB. No swapping observed yet, but there's now very little margin for several VMs to peak in memory at once &mdash; see the <a href="dev-box-runbook.html">Dev-Box Runbook</a> for the full sizing rationale.</div>
 
       </div>
     </div>
@@ -437,7 +445,7 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
 
         <div class="kv">
           <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">General self&#8209;hosted apps behind Caddy, plus the public edge (Cloudflare Tunnel + Authentik)</span></div>
-          <div class="kv-item"><span class="qr-key">Resources</span><span class="qr-val">6 cores &middot; 12 GiB RAM &middot; 40+250 GB disk (20 GB used)</span></div>
+          <div class="kv-item"><span class="qr-key">Resources</span><span class="qr-val">6 cores &middot; 12 GiB RAM configured, 11 GiB live balloon target (2026&#8209;09&#8209;16, freed for dev&#8209;box, reversible) &middot; 40+250 GB disk (20 GB used)</span></div>
           <div class="kv-item"><span class="qr-key">IaC repo</span><span class="qr-val">homelab&#8209;stacks, <code>main</code> (PR #13 merged 2026&#8209;09&#8209;06)</span></div>
         </div>
 
@@ -563,6 +571,34 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
     </div>
   </section>
 
+  <!-- ============ DEV-BOX ============ -->
+  <section id="host-devbox" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left">
+          <div>
+            <h2>dev-box &mdash; VMID 103</h2>
+            <div class="sub">Ubuntu 24.04 LTS &middot; cloud image + cloud-init</div>
+          </div>
+        </div>
+        <span class="pill good"><span class="dot"></span>running &middot; added 2026&#8209;09&#8209;16</span>
+      </div>
+      <div class="panel-body">
+
+        <div class="kv">
+          <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">Disposable Docker/Compose sandbox for the Claude Code instance inside a Hermes container to run pre&#8209;PR application verification</span></div>
+          <div class="kv-item"><span class="qr-key">Resources</span><span class="qr-val">2 cores &middot; 4 GiB RAM (balloon min 2 GiB) &middot; 60 GB disk, thin&#8209;provisioned</span></div>
+          <div class="kv-item"><span class="qr-key">Autostart</span><span class="qr-val">off &mdash; started on demand</span></div>
+        </div>
+
+        <p style="font-size:13.5px; color:var(--ink-soft); max-width:70ch;">Reached only over the homelab LAN via a dedicated SSH identity generated inside the Hermes container's own persistent state (never printed, host&#8209;key pinned) &mdash; not by Tailscale, not by any credential shared with production. The <code>claude&#8209;verifier</code> account on dev-box can run Docker/Compose freely (that authority is scoped to this one disposable VM) but has no path back into Proxmox, the Services VM, or the Agents VM's own Docker daemon. Full architecture, access design, and end&#8209;to&#8209;end validation results: <a href="dev-box-runbook.html">Dev-Box Runbook</a>.</p>
+
+        <div class="callout good"><strong>Verified end&#8209;to&#8209;end from inside the Hermes container itself</strong> (not just from an admin session): SSH identity resolves correctly, remote Docker and Compose both work, a disposable test stack builds/starts/passes healthchecks/is reachable/logs are readable, and teardown removes every resource it created and nothing else.</div>
+
+      </div>
+    </div>
+  </section>
+
   <!-- ============ BACKUPS / DR ============ -->
   <section id="backups" class="host">
     <div class="panel">
@@ -611,7 +647,7 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
           <div class="ledger-row"><div class="num">04</div><div class="txt"><strong>Old restic repo still on disk</strong> &middot; a retired backup repository directory on services, kept as a fallback until PBS is fully trusted.</div><div></div></div>
           <div class="ledger-row"><div class="num">05</div><div class="txt"><strong>Resolved</strong> &middot; homelab&#8209;stacks PR #4 (backup notifications + storage alert) merged.</div><div></div></div>
           <div class="ledger-row"><div class="num">06</div><div class="txt"><strong>Stale container on agents</strong> &middot; <code>gallant_shaw</code> (hello&#8209;world), exited 10 days ago.</div><div></div></div>
-          <div class="ledger-row"><div class="num">07</div><div class="txt"><strong>32 GiB allocated vs. 30 GiB physical RAM</strong> on pve01 &mdash; no headroom for another VM as&#8209;is.</div><div></div></div>
+          <div class="ledger-row"><div class="num">07</div><div class="txt"><strong>Resolved, with a new open item.</strong> The 4th&#8209;VM headroom problem was solved by live&#8209;ballooning services from 12&rarr;11 GiB to fit dev&#8209;box (VMID 103) &mdash; but that leaves the host with very little free RAM margin across all four VMs. Worth watching, not yet a problem.</div><div></div></div>
           <div class="ledger-row"><div class="num">08</div><div class="txt"><strong>No storage&#8209;growth projection yet</strong> for homelab&#8209;datastore &mdash; needs 1&ndash;2 weeks of real data before extrapolating a fill&#8209;up date.</div><div></div></div>
           <div class="ledger-row"><div class="num">09</div><div class="txt"><strong>NOW has no application&#8209;level auth</strong> &middot; public and open to anyone with the URL since PR #13 removed Authentik from its path. Accepted risk until NOW ships its own signup/login.</div><div></div></div>
           <div class="ledger-row"><div class="num">10</div><div class="txt"><strong>Komodo/Uptime Kuma not yet behind Authentik</strong> &middot; still Tailscale&#8209;IP:port direct, per the target architecture in docs/ARCHITECTURE.md. Tracked as future work.</div><div></div></div>
@@ -635,7 +671,8 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
             <div class="code">Hypervisor    static LAN IP, key auth
 Agents VM     static LAN IP, key auth
 Services VM   static LAN IP, key auth
-PBS VM        static LAN IP, key auth</div>
+PBS VM        static LAN IP, key auth
+dev-box VM    static LAN IP, key auth (LAN-scoped)</div>
           </div>
           <div>
             <h3 class="block-title">Web UIs</h3>
@@ -650,7 +687,7 @@ Authentik    &lt;Authentik LAN hostname&gt; (LAN only)</div>
           <div>
             <h3 class="block-title">IaC repos</h3>
             <div class="code">homelab-agents   &#8594; VMID 100
-homelab-stacks   &#8594; VMID 101</div>
+homelab-stacks   &#8594; VMID 101 (also documents dev-box, VMID 103)</div>
           </div>
         </div>
       </div>
@@ -659,7 +696,7 @@ homelab-stacks   &#8594; VMID 101</div>
 
   <footer>
     <span>Home Lab Runbook &middot; assembled by live SSH scan, not from memory</span>
-    <span>pve01 &middot; agents &middot; services &middot; pbs</span>
+    <span>pve01 &middot; agents &middot; services &middot; pbs &middot; dev-box</span>
   </footer>
 
 </div>
