@@ -275,6 +275,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
       <a href="#resources">Resources</a>
       <a href="#backup">Backup</a>
       <a href="#failure-modes">Failure modes</a>
+      <a href="#external-access">Dev-box access</a>
       <a href="#reference">Reference</a>
     </nav>
   </div>
@@ -288,7 +289,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
     <p class="hero-sub">Four independent AI agents on one host, each with its own identity, credentials, and now its own long-term memory &mdash; enforced by filesystem and network boundaries, not by prompting. This page is the deep architectural reference; the <a href="homelab-runbook.html#host-agents">Home Lab Runbook</a> carries only this VM's summary card alongside the other three hosts.</p>
     <div class="scan-time">
       <span class="dot" aria-hidden="true"></span>
-      <span><strong>Source of truth / last verified:</strong> generated from the <code>homelab-agents</code> infrastructure-as-code repository, current through <code>main</code> (2026&#8209;09&#8209;13, model router added on hermes&#8209;1 and hermes&#8209;4). Treat conflicts in favor of re-checking the repo and the live VM, not this page.</span>
+      <span><strong>Source of truth / last verified:</strong> generated from the <code>homelab-agents</code> infrastructure-as-code repository, current through <code>main</code> (2026&#8209;09&#8209;13, model router added on hermes&#8209;1 and hermes&#8209;4; 2026&#8209;09&#8209;16, hermes&#8209;1 gained outbound SSH access to <a href="dev-box-runbook.html">dev-box</a>). Treat conflicts in favor of re-checking the repo and the live VM, not this page.</span>
     </div>
   </header>
 
@@ -788,7 +789,22 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
           <div class="step"><div class="num">01</div><div class="txt"><strong>Two processes, one data directory, always fails.</strong> The embedded database is single&#8209;writer. A second independent process (a diagnostic command, a duplicate registration) against a brain that's already live fails on the lock instead of silently corrupting anything &mdash; expected, not a bug. Fix: never run a second process against a live brain's data directory; use the one already running.</div></div>
           <div class="step"><div class="num">02</div><div class="txt"><strong>Named sub-profiles have their own configuration &mdash; no inheritance from the base profile.</strong> A fix applied to a container's base configuration does not reach its named sub&#8209;profiles; each one needs the same change applied to its own separate config independently. This bit an earlier, unrelated speech&#8209;to&#8209;text fix before it bit the knowledge&#8209;layer rollout &mdash; same root cause both times.</div></div>
           <div class="step"><div class="num">03</div><div class="txt"><strong>Don't manually poke an individual profile's gateway service after boot.</strong> On container start, the main multiplexed process and each named profile's own standalone service both race for that profile's platform token; the main process is expected to win and absorb it. Manually nudging the standalone service well after boot can instead let it win that race and knock the main process's session offline. Recovery is a plain container restart, not further service-level intervention.</div></div>
+          <div class="step"><div class="num">04</div><div class="txt"><strong>Writing into a persistent state directory as the container's default (root) user creates files the agent process can't read.</strong> Hit while wiring up hermes&#8209;1's dedicated outbound SSH identity (see below): the agent process itself runs as an unprivileged in&#8209;container user, and a root&#8209;owned config or key file under its state directory is silently unreadable to it. The symptom looks like a DNS failure (&ldquo;could not resolve hostname&rdquo;), not a permissions error, because SSH just treats an unopenable config file as absent. Fix: always write as that unprivileged user, or fix ownership afterward &mdash; check this first before assuming a networking problem.</div></div>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ EXTERNAL ACCESS ============ -->
+  <section id="external-access" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Outbound access to dev-box</h2><div class="sub">One new capability, added 2026&#8209;09&#8209;16, that doesn't loosen anything else</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <p class="lead">hermes&#8209;1's inner Claude Code can now open an outbound SSH connection to a separate, disposable sandbox VM (<a href="dev-box-runbook.html">dev-box</a>, VMID 103) to run full application stacks for pre&#8209;PR verification. The dedicated keypair lives inside hermes&#8209;1's own <code>&lt;per-agent state path&gt;/.ssh/</code> &mdash; the same isolated, persistent location described above &mdash; and never leaves it; only its public half was installed on the remote side.</p>
+        <p class="lead" style="margin-top:10px;">Nothing about hermes&#8209;1's own isolation changed to enable this: still no <code>/var/run/docker.sock</code> mount from the Agents VM (re&#8209;verified across all four Hermes containers as part of this change), still not privileged, and the <a href="#model-router">model router</a> was untouched. This is an outbound&#8209;only capability &mdash; nothing new can reach into hermes&#8209;1 as a result of it.</p>
       </div>
     </div>
   </section>
