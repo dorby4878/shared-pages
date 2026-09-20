@@ -247,7 +247,13 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
       <a href="#security">Security</a>
       <a href="#risks">Risks</a>
       <a href="#validation">Validation</a>
+      <a href="#health">Health</a>
+      <a href="#usage">Usage</a>
+      <a href="#failures">Failures</a>
+      <a href="#journal">Journal</a>
+      <a href="#baseline">Baseline</a>
       <a href="#snapshot">Rollback</a>
+      <a href="#audit">Audit trail</a>
       <a href="#reference">Reference</a>
     </nav>
   </div>
@@ -261,7 +267,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
     <p class="hero-sub">dev-box is the isolated host where the Hermes agents verify application changes before a pull request: integration and end&#8209;to&#8209;end tests of an exact commit, several applications queued, each run in a fresh unprivileged container with its own Docker daemon and network &mdash; without touching the Agents VM, Hermes, the knowledge layer, or the Services VM's production workloads.</p>
     <div class="scan-time">
       <span class="dot" aria-hidden="true"></span>
-      <span><strong>Source of truth / last verified:</strong> isolated backend installed and proven 2026&#8209;09&#8209;20. Full internal runbook: <code>homelab-stacks</code> &rsaquo; <code>docs/DEV-BOX.md</code>. Day&#8209;2 operations and incident handling: <a href="dev-box-verification-runbook.html">Verification Backend Runbook</a>. Treat conflicts in favor of re&#8209;checking that repo and the live VM, not this page.</span>
+      <span><strong>Source of truth / last verified:</strong> isolated backend installed and proven 2026&#8209;09&#8209;20. Full internal runbook: <code>homelab-stacks</code> &rsaquo; <code>docs/DEV-BOX.md</code>. Day&#8209;2 operations and incident handling are in the sections from <a href="#health">Health checks</a> onward. Treat conflicts in favor of re&#8209;checking that repo and the live VM, not this page.</span>
     </div>
   </header>
 
@@ -409,7 +415,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
       </div>
       <div class="panel-body">
         <p class="lead">The first version of this VM let the agent's SSH account run <code>docker</code> directly. Membership of the host <code>docker</code> group is equivalent to root on the VM, so candidate code could never be considered contained. That account was removed from the <code>docker</code> group once the isolated backend was live and proven; the old working directory and the direct path are unused and unreachable.</p>
-        <div class="callout"><strong>Change&#8209;control consequence:</strong> host users, groups and the Docker group are part of the supervisor's idle baseline. Any intentional change to them makes the next run fail closed until the baseline is deliberately re&#8209;captured &mdash; see the procedure in the <a href="dev-box-verification-runbook.html#baseline">Verification Backend Runbook</a>.</div>
+        <div class="callout"><strong>Change&#8209;control consequence:</strong> host users, groups and the Docker group are part of the supervisor's idle baseline. Any intentional change to them makes the next run fail closed until the baseline is deliberately re&#8209;captured &mdash; see the procedure in the <a href="#baseline">Changing the host: the idle baseline</a>.</div>
       </div>
     </div>
   </section>
@@ -495,6 +501,145 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
     </div>
   </section>
 
+  <!-- ============ HEALTH ============ -->
+  <section id="health" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Health checks</h2><div class="sub">Three commands, in this order</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="steps">
+          <div class="step"><div class="num">01</div><div class="txt"><strong>From the Hermes container</strong> (the real path): the health operation must report the pinned supervisor version, no fail&#8209;closed marker, and exactly the fourteen frozen checks all ok.</div></div>
+          <div class="step"><div class="num">02</div><div class="txt"><strong>On dev&#8209;box, idle host</strong>: the supervisor's inventory must equal the idle baseline (containers, networks, volumes, users, groups, firewall, mounts, listeners, units) and no per&#8209;run Incus instance may exist.</div></div>
+          <div class="step"><div class="num">03</div><div class="txt"><strong>Service log</strong>: <code>journalctl -u now-verifyd</code> shows a clean start and no repeated &ldquo;ADMIN ALERT&rdquo; lines.</div></div>
+        </div>
+        <div class="code">ssh now-verify health                                   <span class="c"># from the Hermes container</span>
+now-verifyctl inventory                                 <span class="c"># on dev-box, compare with the idle baseline</span>
+incus list --all-projects                               <span class="c"># must be empty when idle</span>
+journalctl -u now-verifyd -n 50 --no-pager</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ USE ============ -->
+  <section id="usage" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>How the agents use it</h2><div class="sub">And the rules that keep it safe</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Command (in the skill's scripts directory)</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><code>delegate_to_claude.py --phase verify --candidate-sha &lt;sha&gt;</code></td><td class="dim">runs the isolated verification for an exact commit and persists the evidence record</td></tr>
+              <tr><td><code>pr_precondition.py --repo &lt;repo&gt; --sha &lt;sha&gt;</code></td><td class="dim">a fresh verification plus read&#8209;back, run immediately before a pull request is created</td></tr>
+              <tr><td><code>tests/integration/now_verify_fixture.py</code></td><td class="dim">manual live self&#8209;test against the real gate with throwaway repositories (pass, fail, forged output, timeout, nested Docker, bad manifest)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warn" style="margin-top:14px;"><strong>Always run verification as a background job.</strong> A run can take up to an hour; a foreground terminal call is cut off after a few minutes. Requests for several applications queue on the runner and execute one at a time. Avoid restarting the Hermes container while a verification is running.</div>
+        <div class="tbl-wrap" style="margin-top:14px;">
+          <table>
+            <thead><tr><th>Exit code</th><th>Meaning</th></tr></thead>
+            <tbody>
+              <tr><td>0</td><td class="dim">PASS, or an authoritative &ldquo;not applicable&rdquo; (no manifest and no Compose/Dockerfile topology, after a successful tree listing)</td></tr>
+              <tr><td>1</td><td class="dim">FAIL &mdash; the record says which condition failed</td></tr>
+              <tr><td>2</td><td class="dim">the record could not be persisted and read back identically &mdash; the verdict must not be relied on</td></tr>
+              <tr><td>130</td><td class="dim">interrupted; never success</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VERDICT ============ -->
+  <section id="verdict" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>What a PASS means</h2><div class="sub">Computed by trusted code from the supervisor's evidence</div></div></div>
+      </div>
+      <div class="panel-body">
+        <p class="lead">Two separate read&#8209;only calls (status, evidence) are strictly parsed and compared with facts the runner computed itself from the exact archive it sent. Nothing the candidate printed, and not the SSH exit code, is an input.</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Condition for PASS</th><th>Why</th></tr></thead>
+            <tbody>
+              <tr><td>Pinned supervisor version and health; exact frozen check names all ok</td><td class="dim">an unknown or changed supervisor fails closed</td></tr>
+              <tr><td>Archive size, digest and manifest recomputed locally equal what the supervisor stored</td><td class="dim">the verified bytes are the sent bytes</td></tr>
+              <tr><td>Launch recorded with the exact expected command, resources, timeout and Compose project</td><td class="dim">the run was configured as requested</td></tr>
+              <tr><td>Candidate exit code 0; no timeout, kill, refusal or error</td><td class="dim">the script itself succeeded</td></tr>
+              <tr><td>Run container destroyed, host equals the idle baseline, zero remaining processes</td><td class="dim">clean teardown</td></tr>
+              <tr><td>Isolation attestation: fourteen preflight and seven per&#8209;instance checks, AppArmor label, ID map</td><td class="dim">the run really was contained</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="lead" style="margin-top:12px;">Any transport failure is a FAIL. If a run was already accepted, the runner kills and cleans exactly that run and records what it could confirm; a recovered run never becomes a PASS.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FAILURE MODES ============ -->
+  <section id="failures" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Failure modes &amp; responses</h2><div class="sub">Read the record's checks first; then find the row</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Symptom</th><th>Meaning</th><th>Response</th></tr></thead>
+            <tbody>
+              <tr><td>Health reports the fail&#8209;closed marker, all runs refused</td><td class="dim">the supervisor saw something it did not expect (usually a baseline difference or a corrupt run record)</td><td class="dim">read the marker's message on dev&#8209;box; fix or explain the cause; only then follow <a href="#baseline">the baseline procedure</a> if it was an intentional host change</td></tr>
+              <tr><td>&ldquo;busy: another run is active&rdquo;</td><td class="dim">the global lock is held</td><td class="dim">expected under queueing; the runner waits and retries; nothing to do</td></tr>
+              <tr><td>&ldquo;busy: submit quota&rdquo;</td><td class="dim">four outstanding submissions</td><td class="dim">clean up abandoned submissions or wait for the reaper (one hour)</td></tr>
+              <tr><td>Exit 137 in the candidate</td><td class="dim">killed for memory</td><td class="dim">reduce the stack or run it alone; do not resize the VM blindly</td></tr>
+              <tr><td>&ldquo;unresolved earlier run&rdquo; / &ldquo;corrupt journal entry&rdquo;</td><td class="dim">a previous runner accepted a run and could not prove it finished; the runner refuses to start another candidate</td><td class="dim">see <a href="#journal">the journal procedure</a></td></tr>
+              <tr><td>Verdict FAIL with &ldquo;transport failure&rdquo;</td><td class="dim">SSH or reply problem after a run was accepted</td><td class="dim">the runner already killed and cleaned the run; re&#8209;run once the gate answers health</td></tr>
+              <tr><td>Supervisor process killed mid&#8209;run</td><td class="dim">systemd restarts it; startup reconciliation tears down leftovers</td><td class="dim">the run is reported failed (supervisor crash); no evidence is invented; re&#8209;run</td></tr>
+              <tr><td>Manifest or archive refused at submit</td><td class="dim">bad command path, non&#8209;executable script, oversized archive</td><td class="dim">fix the repository; nothing was created on the host</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ JOURNAL ============ -->
+  <section id="journal" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>The run journal</h2><div class="sub">Durable record of runs that were accepted but not yet proven finished</div></div></div>
+      </div>
+      <div class="panel-body">
+        <p class="lead">Before a run may start, its id is written to a private journal directory in the runner's state area (mode 0700, owned by the agent user). The entry is removed only when a strictly parsed status <em>that matches the run's identity</em> (run id, commit, archive digest, and for the current run the manifest) shows it finished, or the supervisor states the run no longer exists. Every verification first reconciles the journal: it kills and cleans each listed run, and refuses to start a candidate if any run cannot be proven finished. An entry that is malformed, foreign&#8209;owned, world&#8209;writable, or in an insecure directory also blocks.</p>
+        <div class="callout crit"><strong>Never delete a journal entry merely to unblock.</strong> First obtain an identity&#8209;consistent terminal status (or the supervisor's &ldquo;unknown run&rdquo; answer) for that run id, or confirm on dev&#8209;box that no Incus instance or project for that run exists and the supervisor is healthy. Only then delete that one file.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BASELINE ============ -->
+  <section id="baseline" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Changing the host: the idle baseline</h2><div class="sub">Users, groups and the Docker group are part of it</div></div></div>
+        <span class="pill warn"><span class="dot"></span>change control</span>
+      </div>
+      <div class="panel-body">
+        <p class="lead">After every run the supervisor compares the whole host with an idle baseline that includes the account, group and subordinate&#8209;ID file hashes and the Docker group membership. An intentional change to any of those &mdash; for example removing an account from the Docker group &mdash; therefore makes the next run fail closed until the baseline is deliberately re&#8209;captured. This happened once, for real, when the retired direct&#8209;Docker account was removed.</p>
+        <div class="steps">
+          <div class="step"><div class="num">01</div><div class="txt">Make sure no run is active and <code>incus list --all-projects</code> is empty.</div></div>
+          <div class="step"><div class="num">02</div><div class="txt">Capture the current inventory and compare it with the baseline: <strong>the only differing keys must be the ones you changed on purpose.</strong> Anything else is an incident, not a baseline update.</div></div>
+          <div class="step"><div class="num">03</div><div class="txt">Back up the baseline file, update just those keys, remove the fail&#8209;closed marker, restart the supervisor.</div></div>
+          <div class="step"><div class="num">04</div><div class="txt">Verify: health all ok, inventory identical to the new baseline, a fixture run passes.</div></div>
+        </div>
+        <div class="callout warn" style="margin-top:14px;"><strong>Never re&#8209;capture the baseline to silence an unexplained difference.</strong> The baseline is the reference the whole isolation claim rests on.</div>
+      </div>
+    </div>
+  </section>
+
+
   <!-- ============ SNAPSHOT ============ -->
   <section id="snapshot" class="host">
     <div class="panel">
@@ -513,7 +658,35 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
             </tbody>
           </table>
         </div>
-        <p class="lead" style="margin-top:12px;">Roll back with <code>qm rollback 103 &lt;snapshot&gt;</code> from the Proxmox host. A file&#8209;level backup of the previous supervisor and state is kept on the VM for the most specific rollback; see the <a href="dev-box-verification-runbook.html#rollback">Verification Backend Runbook</a>.</p>
+        <h3 class="block-title" style="margin-top:16px;">Rollback ladder (most specific first)</h3>
+        <div class="steps">
+          <div class="step"><div class="num">01</div><div class="txt"><strong>Runner</strong> (Hermes container): restore the timestamped, hash&#8209;checked tarball of the previous skill directory kept next to the design notes; the apply script prints the exact command.</div></div>
+          <div class="step"><div class="num">02</div><div class="txt"><strong>Supervisor</strong> (dev&#8209;box): stop the service, restore the previous supervisor file and state from the timestamped backup directory recorded on the VM, start, verify health.</div></div>
+          <div class="step"><div class="num">03</div><div class="txt"><strong>Whole VM</strong>: <code>qm rollback 103 &lt;snapshot&gt;</code> from the Proxmox host, using the snapshots above.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ AUDIT TRAIL ============ -->
+  <section id="audit" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Audit trail</h2><div class="sub">What is recorded, and where</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Record</th><th>Location &amp; content</th></tr></thead>
+            <tbody>
+              <tr><td>Per&#8209;run supervisor evidence</td><td class="dim">root&#8209;only state directory on dev&#8209;box: fixed&#8209;schema record with the launch command, isolation attestation, result, cleanup and baseline comparison; old runs are reaped after an hour</td></tr>
+              <tr><td>Verification record</td><td class="dim">the runner's state area, keyed by repository and exact commit: schema&#8209;versioned record embedding the supervisor's replies; a stored PASS re&#8209;validates the same rules, but is an audit artifact &mdash; authorization always comes from a fresh run</td></tr>
+              <tr><td>Run journal</td><td class="dim">runs accepted but not yet proven finished (see above)</td></tr>
+              <tr><td>Supervisor log</td><td class="dim">systemd journal for <code>now-verifyd</code>, including admin alerts</td></tr>
+              <tr><td>Design and review history</td><td class="dim">design notes and the independent review rounds are kept with the runner's working notes on the Agents VM</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </section>
@@ -530,7 +703,6 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
           <div class="kv-item"><span class="qr-key">SSH (Hermes runner)</span><span class="qr-val">alias <code>now-verify</code>, dedicated key, forced command, host&#8209;key pinned</span></div>
           <div class="kv-item"><span class="qr-key">Health check</span><span class="qr-val"><code>ssh now-verify health</code> from the Hermes container</span></div>
           <div class="kv-item"><span class="qr-key">Internal runbook</span><span class="qr-val"><code>homelab-stacks</code> &rsaquo; <code>docs/DEV-BOX.md</code></span></div>
-          <div class="kv-item"><span class="qr-key">Operations</span><span class="qr-val"><a href="dev-box-verification-runbook.html">Verification Backend Runbook</a></span></div>
           <div class="kv-item"><span class="qr-key">Autostart on host reboot</span><span class="qr-val">off &mdash; start manually</span></div>
         </div>
         <div class="callout"><strong>Known limitations:</strong> RAM is tighter than the original target due to host memory pressure (see the <a href="homelab-runbook.html#host-pve01">Home Lab Runbook</a>); Tailscale was deliberately skipped since plain LAN reachability from Hermes is sufficient; dev&#8209;box does not auto&#8209;start after a hypervisor reboot; verifications run one at a time.</div>
@@ -540,7 +712,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
 
   <footer>
     <span>Dev-Box Runbook &middot; isolated by design</span>
-    <span><a href="dev-box-verification-runbook.html">Verification Backend Runbook</a> &middot; <a href="homelab-runbook.html">Home Lab Runbook</a> &middot; <a href="agents-vm-runbook.html">Agents VM Runbook</a></span>
+    <span><a href="homelab-runbook.html">Home Lab Runbook</a> &middot; <a href="agents-vm-runbook.html">Agents VM Runbook</a></span>
   </footer>
 
 </div>
