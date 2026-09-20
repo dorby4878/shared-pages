@@ -138,8 +138,15 @@ footer{margin-top:56px; padding-top:20px; border-top:1px solid var(--line); colo
       <li class="doc-item">
         <a class="doc-link" href="dev-box-runbook.html">
           <span class="doc-title">Dev-Box Runbook</span><span class="doc-path">dev-box-runbook.html</span>
-          <p class="doc-desc">A disposable Docker/Compose sandbox VM that the Claude Code instance inside a Hermes container can SSH into for pre-PR application verification &mdash; isolated from Agents VM, Hermes, the knowledge layer, and Services VM production workloads.</p>
-          <span class="doc-tags"><span class="tag">Operations</span><span class="tag">Runbook</span><span class="tag">Sandbox</span></span>
+          <p class="doc-desc">The isolated pre-PR verification VM: a forced-command SSH gate, a root supervisor, and one throwaway unprivileged container per run of an exact commit &mdash; isolated from the Agents VM, Hermes, the knowledge layer and the Services VM.</p>
+          <span class="doc-tags"><span class="tag">Operations</span><span class="tag">Runbook</span><span class="tag">Isolation</span></span>
+        </a>
+      </li>
+      <li class="doc-item">
+        <a class="doc-link" href="dev-box-verification-runbook.html">
+          <span class="doc-title">Verification Backend Runbook</span><span class="doc-path">dev-box-verification-runbook.html</span>
+          <p class="doc-desc">Day-2 operations for the dev-box verification backend: health checks, how the agents use it, what a PASS means, failure modes and responses, the run journal, idle-baseline change control, rollback and audit trail.</p>
+          <span class="doc-tags"><span class="tag">Operations</span><span class="tag">Runbook</span><span class="tag">Audit</span></span>
         </a>
       </li>
     </ul>
