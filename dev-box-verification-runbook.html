@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verification Backend Runbook</title>
+<meta name="description" content="Operations runbook for the dev-box verification backend: health checks, how the Hermes agents use it, what a PASS means, failure modes and responses, the run journal, idle-baseline change control, rollback and audit trail.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
+<style>
+:root{
+  --bg:#F3F4F1;
+  --surface:#FFFFFF;
+  --surface-2:#E9ECE7;
+  --line:#D9DCD4;
+  --ink:#1B211D;
+  --ink-soft:#54605A;
+  --ink-faint:#838F88;
+  --accent:#C9622A;
+  --accent-ink:#FFFFFF;
+  --good:#2F6F62;
+  --good-bg:#E3EFEA;
+  --warn:#96701E;
+  --warn-bg:#F5EBD3;
+  --crit:#A5393A;
+  --crit-bg:#F5E1DF;
+  --focus:#2F6F62;
+  --shadow: 0 1px 2px rgba(27,33,29,0.06), 0 8px 20px -12px rgba(27,33,29,0.18);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#14181A; --surface:#1B2124; --surface-2:#212A2C; --line:#2B3436;
+    --ink:#E8EBE6; --ink-soft:#AAB3AD; --ink-faint:#71807A;
+    --accent:#E0824A; --accent-ink:#191008;
+    --good:#54AC98; --good-bg:#1B322C;
+    --warn:#D9A63E; --warn-bg:#3A2F14;
+    --crit:#E1837F; --crit-bg:#3A2020;
+    --focus:#54AC98;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#14181A; --surface:#1B2124; --surface-2:#212A2C; --line:#2B3436;
+  --ink:#E8EBE6; --ink-soft:#AAB3AD; --ink-faint:#71807A;
+  --accent:#E0824A; --accent-ink:#191008;
+  --good:#54AC98; --good-bg:#1B322C;
+  --warn:#D9A63E; --warn-bg:#3A2F14;
+  --crit:#E1837F; --crit-bg:#3A2020;
+  --focus:#54AC98;
+  --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+}
+
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  background:var(--bg); color:var(--ink);
+  font-family:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.mono,.pill,code,.qr-key,.qr-val,table,.meta,.scan-time{
+  font-family:"IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+h1,h2,h3{text-wrap:balance; margin:0;}
+a{color:var(--good);}
+::selection{background:var(--accent); color:var(--accent-ink);}
+:focus-visible{outline:2px solid var(--focus); outline-offset:2px;}
+@media (prefers-reduced-motion: reduce){ *{animation-duration:0.001ms !important; animation-iteration-count:1 !important; transition-duration:0.001ms !important; scroll-behavior:auto !important;} }
+
+.skip-link{
+  position:absolute; left:-999px; top:auto;
+  background:var(--surface); color:var(--ink); padding:10px 16px;
+  border:1px solid var(--line); border-radius:6px; z-index:100;
+}
+.skip-link:focus{ left:16px; top:16px; }
+
+.wrap{max-width:1080px; margin:0 auto; padding:0 24px 96px;}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:sticky; top:0; z-index:20;
+  background:color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter:blur(8px);
+  border-bottom:1px solid var(--line);
+}
+.topbar-inner{
+  max-width:1080px; margin:0 auto; padding:14px 24px;
+  display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+}
+.topbar-left{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
+.brand{display:flex; align-items:baseline; gap:10px;}
+.brand .mark{width:10px; height:10px; border-radius:2px; background:var(--accent); display:inline-block; flex:none;}
+.brand-name{font-weight:600; font-size:15px; letter-spacing:0.01em;}
+.back-link{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:12.5px; color:var(--ink-soft); text-decoration:none;
+  border-bottom:1px solid transparent;
+}
+.back-link:hover, .back-link:focus-visible{color:var(--ink); border-color:var(--line);}
+nav.jump{display:flex; gap:16px; flex-wrap:wrap;}
+nav.jump a{
+  font-size:12px; color:var(--ink-soft); text-decoration:none;
+  letter-spacing:0.03em; text-transform:uppercase;
+  border-bottom:1px solid transparent; padding-bottom:2px;
+}
+nav.jump a:hover, nav.jump a:focus-visible{color:var(--ink); border-color:var(--line);}
+
+/* ---------- header ---------- */
+header.hero{padding:44px 0 20px;}
+.eyebrow{font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--accent); font-weight:600; margin:0 0 10px;}
+h1.title{font-size:32px; font-weight:700; letter-spacing:-0.01em;}
+.hero-sub{color:var(--ink-soft); font-size:15.5px; margin-top:10px; max-width:70ch;}
+.scan-time{
+  display:inline-flex; align-items:flex-start; gap:8px; margin-top:18px;
+  font-size:12.5px; color:var(--ink-faint); background:var(--surface-2);
+  border:1px solid var(--line); padding:10px 14px; border-radius:5px; max-width:70ch;
+}
+.dot{width:7px;height:7px;border-radius:50%; background:var(--good); flex:none; margin-top:5px;}
+
+/* ---------- pills ---------- */
+.pill{
+  display:inline-flex; align-items:center; gap:6px;
+  font-size:10.5px; font-weight:600; letter-spacing:0.03em;
+  padding:3px 9px; border-radius:99px; text-transform:uppercase; white-space:nowrap;
+}
+.pill.good{background:var(--good-bg); color:var(--good);}
+.pill.warn{background:var(--warn-bg); color:var(--warn);}
+.pill.crit{background:var(--crit-bg); color:var(--crit);}
+.pill .dot{width:6px;height:6px; margin-top:0;}
+.pill.good .dot{background:var(--good);}
+.pill.warn .dot{background:var(--warn);}
+.pill.crit .dot{background:var(--crit);}
+
+/* ---------- sections / panels ---------- */
+section.host{margin-top:52px; scroll-margin-top:80px;}
+.panel{border:1px solid var(--line); border-radius:10px; background:var(--surface); box-shadow:var(--shadow); overflow:hidden;}
+.panel-head{
+  display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  padding:18px 22px; border-bottom:1px solid var(--line); background:var(--surface-2);
+}
+.panel-head-left{display:flex; align-items:center; gap:12px;}
+.panel-head h2{font-size:18px; font-weight:700;}
+.panel-head .sub{color:var(--ink-faint); font-size:12.5px; margin-top:2px;}
+.panel-body{padding:22px;}
+.panel-body > * + *{margin-top:24px;}
+
+h3.block-title{
+  font-size:11.5px; text-transform:uppercase; letter-spacing:0.07em;
+  color:var(--ink-faint); font-weight:600; margin-bottom:12px;
+}
+p.lead{font-size:13.8px; color:var(--ink-soft); max-width:74ch; margin:0;}
+p.lead strong{color:var(--ink);}
+
+/* label/value grid */
+.kv{display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:14px 22px;}
+.kv-item{display:flex; flex-direction:column; gap:3px;}
+.qr-key{font-size:11px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:0.05em;}
+.qr-val{font-size:14px; font-weight:500;}
+
+/* tables */
+.tbl-wrap{overflow-x:auto; border:1px solid var(--line); border-radius:8px;}
+table{width:100%; border-collapse:collapse; font-size:12.6px; min-width:480px;}
+th{
+  text-align:left; font-weight:600; color:var(--ink-faint); font-size:11px;
+  letter-spacing:0.04em; text-transform:uppercase;
+  padding:9px 14px; background:var(--surface-2); border-bottom:1px solid var(--line);
+  white-space:nowrap;
+}
+td{padding:9px 14px; border-bottom:1px solid var(--line); font-variant-numeric:tabular-nums; vertical-align:top;}
+tr:last-child td{border-bottom:none;}
+td.dim{color:var(--ink-soft);}
+
+/* code / commands */
+.code{
+  background:var(--surface-2); border:1px solid var(--line); border-radius:7px;
+  padding:12px 14px; font-size:12.4px; overflow-x:auto; white-space:pre;
+  color:var(--ink); font-family:"IBM Plex Mono", ui-monospace, monospace;
+}
+.code .c{color:var(--ink-faint);}
+
+/* callouts */
+.callout{
+  border:1px solid var(--line);
+  background:var(--surface-2); border-radius:8px;
+  padding:14px 16px; font-size:13.3px; color:var(--ink-soft);
+}
+.callout strong{color:var(--ink);}
+.callout.crit{border-color:color-mix(in srgb, var(--crit) 45%, var(--line));}
+.callout.warn{border-color:color-mix(in srgb, var(--warn) 45%, var(--line));}
+.callout.good{border-color:color-mix(in srgb, var(--good) 45%, var(--line));}
+
+/* ordered checklist / numbered steps */
+.steps{display:flex; flex-direction:column;}
+.step{
+  display:grid; grid-template-columns:26px 1fr; gap:14px; align-items:start;
+  padding:13px 0; border-bottom:1px solid var(--line);
+}
+.step:last-child{border-bottom:none;}
+.step .num{font-size:11px; color:var(--ink-faint); padding-top:2px;}
+.step .txt{font-size:13.6px; color:var(--ink-soft);}
+.step .txt strong{color:var(--ink); font-weight:600;}
+.step .txt code{font-size:12px; background:var(--surface-2); padding:1px 5px; border-radius:4px; border:1px solid var(--line);}
+
+/* ---------- flow diagram ---------- */
+.diagram{margin:0;}
+.diagram figcaption{font-size:11.5px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-faint); font-weight:600; margin-bottom:14px;}
+.flow{display:flex; align-items:stretch; gap:8px; flex-wrap:wrap;}
+.flow-node{
+  border:1px solid var(--line); border-radius:8px; background:var(--surface-2);
+  padding:10px 14px; font-size:12.5px; color:var(--ink); min-width:120px;
+  display:flex; flex-direction:column; justify-content:center; gap:2px;
+}
+.flow-node.accent{border-color:var(--accent); background:color-mix(in srgb, var(--accent) 10%, var(--surface-2));}
+.flow-node.dim{color:var(--ink-soft);}
+.flow-sub{font-size:11px; color:var(--ink-faint); font-family:"IBM Plex Sans", sans-serif;}
+.flow-arrow{align-self:center; color:var(--ink-faint); font-size:16px; flex:none;}
+.diagram-note{font-size:12.8px; color:var(--ink-faint); max-width:74ch; margin-top:22px; padding-top:18px; border-top:1px solid var(--line);}
+
+footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); color:var(--ink-faint); font-size:12px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:8px;}
+
+@media print{
+  .topbar{position:static; backdrop-filter:none;}
+  .skip-link{display:none;}
+  .panel{box-shadow:none; break-inside:avoid;}
+  section.host{break-inside:avoid-page;}
+}
+@media (max-width:640px){
+  h1.title{font-size:26px;}
+  .panel-head{flex-direction:column; align-items:flex-start;}
+}
+</style>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <div class="topbar-left">
+      <a class="back-link" href="index.html">&larr; Shared Pages</a>
+      <div class="brand"><span class="mark" aria-hidden="true"></span><span class="brand-name">Verification Backend Runbook</span></div>
+    </div>
+    <nav class="jump" aria-label="Section jump links">
+      <a href="#glance">At a glance</a>
+      <a href="#health">Health</a>
+      <a href="#usage">Usage</a>
+      <a href="#verdict">Verdict</a>
+      <a href="#failures">Failures</a>
+      <a href="#journal">Journal</a>
+      <a href="#baseline">Baseline</a>
+      <a href="#rollback">Rollback</a>
+      <a href="#audit">Audit trail</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap" id="main">
+
+  <header class="hero">
+    <p class="eyebrow">Operations &middot; dev-box &middot; verification backend</p>
+    <h1 class="title">Running the verification backend: health, incidents, change control</h1>
+    <p class="hero-sub">The day&#8209;2 runbook for the isolated pre&#8209;PR verification backend on dev-box: how to tell it is healthy, how the Hermes agents use it, what every failure means, and the exact procedures for the situations that need a human. Architecture and isolation controls live in the <a href="dev-box-runbook.html">Dev-Box Runbook</a>.</p>
+    <div class="scan-time">
+      <span class="dot" aria-hidden="true"></span>
+      <span><strong>Source of truth / last verified:</strong> procedures exercised against the live system on 2026&#8209;09&#8209;20 (supervisor 1.1.0). Full internal notes: <code>homelab-stacks</code> &rsaquo; <code>docs/DEV-BOX.md</code>. Commands below are shown with placeholders for hosts and paths.</span>
+    </div>
+  </header>
+
+  <!-- ============ AT A GLANCE ============ -->
+  <section id="glance" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>At a glance</h2><div class="sub">What runs where</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
+      </div>
+      <div class="panel-body">
+        <div class="kv">
+          <div class="kv-item"><span class="qr-key">Supervisor</span><span class="qr-val"><code>now-verifyd</code> (root, systemd) 1.1.0</span></div>
+          <div class="kv-item"><span class="qr-key">Runner</span><span class="qr-val"><code>coder-specialist</code> skill in the Hermes container</span></div>
+          <div class="kv-item"><span class="qr-key">Gate</span><span class="qr-val">SSH forced command, alias <code>now-verify</code></span></div>
+          <div class="kv-item"><span class="qr-key">Concurrency</span><span class="qr-val">one verification at a time; others queue</span></div>
+          <div class="kv-item"><span class="qr-key">Run length</span><span class="qr-val">seconds to 60 min (heavy apps)</span></div>
+          <div class="kv-item"><span class="qr-key">Fail&#8209;closed marker</span><span class="qr-val">present = supervisor refuses all work</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ HEALTH ============ -->
+  <section id="health" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Health checks</h2><div class="sub">Three commands, in this order</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="steps">
+          <div class="step"><div class="num">01</div><div class="txt"><strong>From the Hermes container</strong> (the real path): the health operation must report the pinned supervisor version, no fail&#8209;closed marker, and exactly the fourteen frozen checks all ok.</div></div>
+          <div class="step"><div class="num">02</div><div class="txt"><strong>On dev&#8209;box, idle host</strong>: the supervisor's inventory must equal the idle baseline (containers, networks, volumes, users, groups, firewall, mounts, listeners, units) and no per&#8209;run Incus instance may exist.</div></div>
+          <div class="step"><div class="num">03</div><div class="txt"><strong>Service log</strong>: <code>journalctl -u now-verifyd</code> shows a clean start and no repeated &ldquo;ADMIN ALERT&rdquo; lines.</div></div>
+        </div>
+        <div class="code">ssh now-verify health                                   <span class="c"># from the Hermes container</span>
+now-verifyctl inventory                                 <span class="c"># on dev-box, compare with the idle baseline</span>
+incus list --all-projects                               <span class="c"># must be empty when idle</span>
+journalctl -u now-verifyd -n 50 --no-pager</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ USE ============ -->
+  <section id="usage" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>How the agents use it</h2><div class="sub">And the rules that keep it safe</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Command (in the skill's scripts directory)</th><th>Purpose</th></tr></thead>
+            <tbody>
+              <tr><td><code>delegate_to_claude.py --phase verify --candidate-sha &lt;sha&gt;</code></td><td class="dim">runs the isolated verification for an exact commit and persists the evidence record</td></tr>
+              <tr><td><code>pr_precondition.py --repo &lt;repo&gt; --sha &lt;sha&gt;</code></td><td class="dim">a fresh verification plus read&#8209;back, run immediately before a pull request is created</td></tr>
+              <tr><td><code>tests/integration/now_verify_fixture.py</code></td><td class="dim">manual live self&#8209;test against the real gate with throwaway repositories (pass, fail, forged output, timeout, nested Docker, bad manifest)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warn" style="margin-top:14px;"><strong>Always run verification as a background job.</strong> A run can take up to an hour; a foreground terminal call is cut off after a few minutes. Requests for several applications queue on the runner and execute one at a time. Avoid restarting the Hermes container while a verification is running.</div>
+        <div class="tbl-wrap" style="margin-top:14px;">
+          <table>
+            <thead><tr><th>Exit code</th><th>Meaning</th></tr></thead>
+            <tbody>
+              <tr><td>0</td><td class="dim">PASS, or an authoritative &ldquo;not applicable&rdquo; (no manifest and no Compose/Dockerfile topology, after a successful tree listing)</td></tr>
+              <tr><td>1</td><td class="dim">FAIL &mdash; the record says which condition failed</td></tr>
+              <tr><td>2</td><td class="dim">the record could not be persisted and read back identically &mdash; the verdict must not be relied on</td></tr>
+              <tr><td>130</td><td class="dim">interrupted; never success</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ VERDICT ============ -->
+  <section id="verdict" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>What a PASS means</h2><div class="sub">Computed by trusted code from the supervisor's evidence</div></div></div>
+      </div>
+      <div class="panel-body">
+        <p class="lead">Two separate read&#8209;only calls (status, evidence) are strictly parsed and compared with facts the runner computed itself from the exact archive it sent. Nothing the candidate printed, and not the SSH exit code, is an input.</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Condition for PASS</th><th>Why</th></tr></thead>
+            <tbody>
+              <tr><td>Pinned supervisor version and health; exact frozen check names all ok</td><td class="dim">an unknown or changed supervisor fails closed</td></tr>
+              <tr><td>Archive size, digest and manifest recomputed locally equal what the supervisor stored</td><td class="dim">the verified bytes are the sent bytes</td></tr>
+              <tr><td>Launch recorded with the exact expected command, resources, timeout and Compose project</td><td class="dim">the run was configured as requested</td></tr>
+              <tr><td>Candidate exit code 0; no timeout, kill, refusal or error</td><td class="dim">the script itself succeeded</td></tr>
+              <tr><td>Run container destroyed, host equals the idle baseline, zero remaining processes</td><td class="dim">clean teardown</td></tr>
+              <tr><td>Isolation attestation: fourteen preflight and seven per&#8209;instance checks, AppArmor label, ID map</td><td class="dim">the run really was contained</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="lead" style="margin-top:12px;">Any transport failure is a FAIL. If a run was already accepted, the runner kills and cleans exactly that run and records what it could confirm; a recovered run never becomes a PASS.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FAILURE MODES ============ -->
+  <section id="failures" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Failure modes &amp; responses</h2><div class="sub">Read the record's checks first; then find the row</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Symptom</th><th>Meaning</th><th>Response</th></tr></thead>
+            <tbody>
+              <tr><td>Health reports the fail&#8209;closed marker, all runs refused</td><td class="dim">the supervisor saw something it did not expect (usually a baseline difference or a corrupt run record)</td><td class="dim">read the marker's message on dev&#8209;box; fix or explain the cause; only then follow <a href="#baseline">the baseline procedure</a> if it was an intentional host change</td></tr>
+              <tr><td>&ldquo;busy: another run is active&rdquo;</td><td class="dim">the global lock is held</td><td class="dim">expected under queueing; the runner waits and retries; nothing to do</td></tr>
+              <tr><td>&ldquo;busy: submit quota&rdquo;</td><td class="dim">four outstanding submissions</td><td class="dim">clean up abandoned submissions or wait for the reaper (one hour)</td></tr>
+              <tr><td>Exit 137 in the candidate</td><td class="dim">killed for memory</td><td class="dim">reduce the stack or run it alone; do not resize the VM blindly</td></tr>
+              <tr><td>&ldquo;unresolved earlier run&rdquo; / &ldquo;corrupt journal entry&rdquo;</td><td class="dim">a previous runner accepted a run and could not prove it finished; the runner refuses to start another candidate</td><td class="dim">see <a href="#journal">the journal procedure</a></td></tr>
+              <tr><td>Verdict FAIL with &ldquo;transport failure&rdquo;</td><td class="dim">SSH or reply problem after a run was accepted</td><td class="dim">the runner already killed and cleaned the run; re&#8209;run once the gate answers health</td></tr>
+              <tr><td>Supervisor process killed mid&#8209;run</td><td class="dim">systemd restarts it; startup reconciliation tears down leftovers</td><td class="dim">the run is reported failed (supervisor crash); no evidence is invented; re&#8209;run</td></tr>
+              <tr><td>Manifest or archive refused at submit</td><td class="dim">bad command path, non&#8209;executable script, oversized archive</td><td class="dim">fix the repository; nothing was created on the host</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ JOURNAL ============ -->
+  <section id="journal" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>The run journal</h2><div class="sub">Durable record of runs that were accepted but not yet proven finished</div></div></div>
+      </div>
+      <div class="panel-body">
+        <p class="lead">Before a run may start, its id is written to a private journal directory in the runner's state area (mode 0700, owned by the agent user). The entry is removed only when a strictly parsed status <em>that matches the run's identity</em> (run id, commit, archive digest, and for the current run the manifest) shows it finished, or the supervisor states the run no longer exists. Every verification first reconciles the journal: it kills and cleans each listed run, and refuses to start a candidate if any run cannot be proven finished. An entry that is malformed, foreign&#8209;owned, world&#8209;writable, or in an insecure directory also blocks.</p>
+        <div class="callout crit"><strong>Never delete a journal entry merely to unblock.</strong> First obtain an identity&#8209;consistent terminal status (or the supervisor's &ldquo;unknown run&rdquo; answer) for that run id, or confirm on dev&#8209;box that no Incus instance or project for that run exists and the supervisor is healthy. Only then delete that one file.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BASELINE ============ -->
+  <section id="baseline" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Changing the host: the idle baseline</h2><div class="sub">Users, groups and the Docker group are part of it</div></div></div>
+        <span class="pill warn"><span class="dot"></span>change control</span>
+      </div>
+      <div class="panel-body">
+        <p class="lead">After every run the supervisor compares the whole host with an idle baseline that includes the account, group and subordinate&#8209;ID file hashes and the Docker group membership. An intentional change to any of those &mdash; for example removing an account from the Docker group &mdash; therefore makes the next run fail closed until the baseline is deliberately re&#8209;captured. This happened once, for real, when the retired direct&#8209;Docker account was removed.</p>
+        <div class="steps">
+          <div class="step"><div class="num">01</div><div class="txt">Make sure no run is active and <code>incus list --all-projects</code> is empty.</div></div>
+          <div class="step"><div class="num">02</div><div class="txt">Capture the current inventory and compare it with the baseline: <strong>the only differing keys must be the ones you changed on purpose.</strong> Anything else is an incident, not a baseline update.</div></div>
+          <div class="step"><div class="num">03</div><div class="txt">Back up the baseline file, update just those keys, remove the fail&#8209;closed marker, restart the supervisor.</div></div>
+          <div class="step"><div class="num">04</div><div class="txt">Verify: health all ok, inventory identical to the new baseline, a fixture run passes.</div></div>
+        </div>
+        <div class="callout warn" style="margin-top:14px;"><strong>Never re&#8209;capture the baseline to silence an unexplained difference.</strong> The baseline is the reference the whole isolation claim rests on.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ROLLBACK ============ -->
+  <section id="rollback" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Rollback ladder</h2><div class="sub">Most specific first</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="steps">
+          <div class="step"><div class="num">01</div><div class="txt"><strong>Runner</strong> (Hermes container): restore the timestamped, hash&#8209;checked tarball of the previous skill directory kept next to the design notes; the apply script prints the exact command.</div></div>
+          <div class="step"><div class="num">02</div><div class="txt"><strong>Supervisor</strong> (dev&#8209;box): stop the service, restore the previous supervisor file and state from the timestamped backup directory recorded on the VM, start, verify health.</div></div>
+          <div class="step"><div class="num">03</div><div class="txt"><strong>Whole VM</strong>: <code>qm rollback 103 &lt;snapshot&gt;</code> from the Proxmox host; the snapshots are listed in the <a href="dev-box-runbook.html#snapshot">Dev&#8209;Box Runbook</a>.</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ AUDIT TRAIL ============ -->
+  <section id="audit" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Audit trail</h2><div class="sub">What is recorded, and where</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Record</th><th>Location &amp; content</th></tr></thead>
+            <tbody>
+              <tr><td>Per&#8209;run supervisor evidence</td><td class="dim">root&#8209;only state directory on dev&#8209;box: fixed&#8209;schema record with the launch command, isolation attestation, result, cleanup and baseline comparison; old runs are reaped after an hour</td></tr>
+              <tr><td>Verification record</td><td class="dim">the runner's state area, keyed by repository and exact commit: schema&#8209;versioned record embedding the supervisor's replies; a stored PASS re&#8209;validates the same rules, but is an audit artifact &mdash; authorization always comes from a fresh run</td></tr>
+              <tr><td>Run journal</td><td class="dim">runs accepted but not yet proven finished (see above)</td></tr>
+              <tr><td>Supervisor log</td><td class="dim">systemd journal for <code>now-verifyd</code>, including admin alerts</td></tr>
+              <tr><td>Design and review history</td><td class="dim">design notes and the independent review rounds are kept with the runner's working notes on the Agents VM</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <span>Verification Backend Runbook &middot; fail&#8209;closed by design</span>
+    <span><a href="dev-box-runbook.html">Dev-Box Runbook</a> &middot; <a href="agents-vm-runbook.html">Agents VM Runbook</a> &middot; <a href="homelab-runbook.html">Home Lab Runbook</a></span>
+  </footer>
+
+</div>
+</body>
+</html>
