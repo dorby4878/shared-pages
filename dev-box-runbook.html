@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dev-Box Runbook</title>
-<meta name="description" content="Technical runbook for dev-box: a disposable Docker/Compose sandbox VM that the Claude Code instance inside a Hermes container can SSH into for pre-PR verification, isolated from Agents VM, Hermes, GBrain, Obsidian, and Services VM production workloads.">
+<meta name="description" content="Technical runbook for dev-box: the isolated pre-PR verification host where every run of an exact commit executes in its own unprivileged container with its own Docker daemon, driven by a root supervisor over a forced-command SSH gate.">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap">
 <style>
 :root{
@@ -240,13 +240,14 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
     </div>
     <nav class="jump" aria-label="Section jump links">
       <a href="#overview">Overview</a>
-      <a href="#purpose">Purpose</a>
+      <a href="#architecture">Architecture</a>
       <a href="#access">Access</a>
-      <a href="#user-docker">User &amp; Docker</a>
-      <a href="#workspace">Workspace</a>
-      <a href="#security">Security boundary</a>
+      <a href="#isolation">Isolation</a>
+      <a href="#contract">Contract</a>
+      <a href="#security">Security</a>
+      <a href="#risks">Risks</a>
       <a href="#validation">Validation</a>
-      <a href="#snapshot">Snapshot</a>
+      <a href="#snapshot">Rollback</a>
       <a href="#reference">Reference</a>
     </nav>
   </div>
@@ -255,12 +256,12 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
 <div class="wrap" id="main">
 
   <header class="hero">
-    <p class="eyebrow">Sandbox VM &middot; VMID 103 &middot; technical runbook</p>
-    <h1 class="title">A disposable box where an agent can break things on purpose</h1>
-    <p class="hero-sub">dev-box exists so the Claude Code instance running inside a Hermes container can provision, test, and destroy full application stacks &mdash; pre-PR verification &mdash; without ever touching the Agents VM, Hermes, the knowledge layer, or the Services VM's production workloads.</p>
+    <p class="eyebrow">Verification VM &middot; VMID 103 &middot; technical runbook</p>
+    <h1 class="title">Every verification runs in its own throwaway container</h1>
+    <p class="hero-sub">dev-box is the isolated host where the Hermes agents verify application changes before a pull request: integration and end&#8209;to&#8209;end tests of an exact commit, several applications queued, each run in a fresh unprivileged container with its own Docker daemon and network &mdash; without touching the Agents VM, Hermes, the knowledge layer, or the Services VM's production workloads.</p>
     <div class="scan-time">
       <span class="dot" aria-hidden="true"></span>
-      <span><strong>Source of truth / last verified:</strong> provisioned and end-to-end validated 2026&#8209;09&#8209;16. Full internal runbook: <code>homelab-stacks</code> &rsaquo; <code>docs/DEV-BOX.md</code>. Treat conflicts in favor of re-checking that repo and the live VM, not this page.</span>
+      <span><strong>Source of truth / last verified:</strong> isolated backend installed and proven 2026&#8209;09&#8209;20. Full internal runbook: <code>homelab-stacks</code> &rsaquo; <code>docs/DEV-BOX.md</code>. Day&#8209;2 operations and incident handling: <a href="dev-box-verification-runbook.html">Verification Backend Runbook</a>. Treat conflicts in favor of re&#8209;checking that repo and the live VM, not this page.</span>
     </div>
   </header>
 
@@ -281,35 +282,50 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
           <div class="kv-item"><span class="qr-key">Memory</span><span class="qr-val">4 GiB (balloon min 2 GiB)</span></div>
           <div class="kv-item"><span class="qr-key">Disk</span><span class="qr-val">60 GB, thin&#8209;provisioned</span></div>
           <div class="kv-item"><span class="qr-key">Network</span><span class="qr-val">static LAN IP &middot; SSH only, LAN&#8209;scoped</span></div>
-          <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">Disposable Docker/Compose sandbox for pre&#8209;PR application verification</span></div>
+          <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">Isolated pre&#8209;PR verification backend (one run at a time)</span></div>
+          <div class="kv-item"><span class="qr-key">Container runtime</span><span class="qr-val">Incus 6.0 LTS, unprivileged system containers</span></div>
+          <div class="kv-item"><span class="qr-key">Supervisor</span><span class="qr-val"><code>now-verifyd</code> 1.1.0 (root, systemd)</span></div>
           <div class="kv-item"><span class="qr-key">Autostart</span><span class="qr-val">off &mdash; started on demand</span></div>
         </div>
-        <div class="callout warn"><strong>Sized below the original 6&ndash;8 GiB target.</strong> The hypervisor had very little free physical RAM at provisioning time (see the <a href="homelab-runbook.html#host-pve01">Home Lab Runbook</a>'s pve01 section). A small, reversible memory reduction on the Services VM's balloon target freed enough headroom to fit dev-box safely, without touching any production application stack. Heavy multi&#8209;service verification runs may need to go one at a time rather than in parallel until the host has more free RAM.</div>
+        <div class="callout warn"><strong>Sized below the original 6&ndash;8 GiB target.</strong> The hypervisor had very little free physical RAM when this VM was added (see the <a href="homelab-runbook.html#host-pve01">Home Lab Runbook</a>'s pve01 section). Heavy end&#8209;to&#8209;end stacks (database + browser tests) can still be killed for memory (exit 137). Do not resize the VM without checking the host's free memory first.</div>
       </div>
     </div>
   </section>
 
-  <!-- ============ PURPOSE ============ -->
-  <section id="purpose" class="host">
+  <!-- ============ ARCHITECTURE ============ -->
+  <section id="architecture" class="host">
     <div class="panel">
       <div class="panel-head">
-        <div class="panel-head-left"><div><h2>Purpose &amp; architecture</h2><div class="sub">One more hop, one more isolation boundary</div></div></div>
+        <div class="panel-head-left"><div><h2>Architecture</h2><div class="sub">A fixed protocol between an untrusted candidate and a root supervisor</div></div></div>
+        <span class="pill good"><span class="dot"></span>current</span>
       </div>
       <div class="panel-body">
-        <p class="lead">Before this existed, there was no safe place for an agent to run <code>docker compose up</code> against arbitrary candidate code. dev-box is that place: a throwaway sandbox reachable only by the specific Hermes agent that needs it, with no path back into anything that matters.</p>
+        <p class="lead">The runner in the Hermes container never gets a shell on dev-box. Its SSH key is bound to a forced command that accepts only a small fixed set of validated operations; a root&#8209;owned supervisor performs every privileged step and produces the evidence the verdict is computed from.</p>
         <figure class="diagram">
           <figcaption>Trust &amp; network boundary</figcaption>
           <div class="flow">
-            <div class="flow-node dim">Proxmox host<span class="flow-sub">hypervisor</span></div>
+            <div class="flow-node">Hermes container<span class="flow-sub">runner (verdict logic)</span></div>
             <span class="flow-arrow">&rarr;</span>
-            <div class="flow-node">Agents VM<span class="flow-sub">Hermes containers</span></div>
+            <div class="flow-node">SSH forced command<span class="flow-sub">health &middot; submit &middot; start &middot; status &middot; evidence &middot; kill &middot; cleanup</span></div>
             <span class="flow-arrow">&rarr;</span>
-            <div class="flow-node">Hermes container<span class="flow-sub">inner Claude Code</span></div>
+            <div class="flow-node accent">now-verifyd<span class="flow-sub">root supervisor &middot; global lock</span></div>
             <span class="flow-arrow">&rarr;</span>
-            <div class="flow-node accent">dev-box (VMID 103)<span class="flow-sub">SSH &middot; Docker &middot; Compose</span></div>
+            <div class="flow-node">Incus container<span class="flow-sub">one per run &middot; own dockerd</span></div>
           </div>
-          <p class="diagram-note">The Services VM (production) sits alongside dev-box as a sibling VM on the same hypervisor &mdash; not in this path at all. dev-box has no credentials or network route into it, into Proxmox itself, or into the Agents VM's Docker daemon.</p>
+          <p class="diagram-note">The Services VM (production) sits alongside dev-box as a sibling VM &mdash; not in this path at all. dev-box has no credentials or network route into it, into Proxmox itself, or into the Agents VM's Docker daemon.</p>
         </figure>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Component</th><th>Where / what</th></tr></thead>
+            <tbody>
+              <tr><td>Supervisor <code>now-verifyd</code></td><td class="dim">root systemd service on dev-box; unix socket API; validates archives, drives Incus, enforces the global lock, tears every run down and diffs the host against its idle baseline</td></tr>
+              <tr><td>Client <code>now-verifyctl</code> + SSH gate</td><td class="dim">unprivileged client; a forced&#8209;command script maps the fixed operations to fixed client arguments (no shell, no forwarding)</td></tr>
+              <tr><td>Golden image</td><td class="dim">Ubuntu 24.04 with Docker Engine and the Compose plugin, a non&#8209;root <code>candidate</code> user; its fingerprint is pinned and checked before every run</td></tr>
+              <tr><td>Storage / network</td><td class="dim">dedicated btrfs pool, dedicated bridge, nftables + UFW rules tagged for this system</td></tr>
+              <tr><td>State &amp; evidence</td><td class="dim">root&#8209;only state directory: per&#8209;run state, evidence, logs, the idle host baseline</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   </section>
@@ -318,76 +334,82 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
   <section id="access" class="host">
     <div class="panel">
       <div class="panel-head">
-        <div class="panel-head-left"><div><h2>Access architecture</h2><div class="sub">Two separate SSH paths, by design</div></div></div>
+        <div class="panel-head-left"><div><h2>Access architecture</h2><div class="sub">Two paths in, both narrow by design</div></div></div>
       </div>
       <div class="panel-body">
         <div class="steps">
           <div class="step"><div class="num">01</div><div class="txt"><strong>Admin (human) access</strong> &mdash; a personal key, same convention used for the other VMs on this host. Not used by any agent.</div></div>
-          <div class="step"><div class="num">02</div><div class="txt"><strong>Hermes Claude Code &rarr; dev-box</strong> (the automated path) &mdash; a dedicated ed25519 keypair generated <em>inside</em> the Hermes container's own persistent state directory (<code>&lt;per-agent state path&gt;/.ssh/</code> &mdash; the same isolated, mode&#8209;restricted location described in the <a href="agents-vm-runbook.html#isolation">Agents VM Runbook</a>'s agent&#8209;isolation model). The keypair never left the container; only its public half was installed on dev-box. Survives container restarts because that directory is bind&#8209;mounted persistent storage, not container&#8209;ephemeral.</div></div>
+          <div class="step"><div class="num">02</div><div class="txt"><strong>Hermes runner &rarr; verification gate</strong> &mdash; a dedicated ed25519 keypair generated <em>inside</em> the Hermes container's own persistent state directory (<code>&lt;per-agent state path&gt;/.ssh/</code> &mdash; the same isolated, mode&#8209;restricted location described in the <a href="agents-vm-runbook.html">Agents VM Runbook</a>). Only the public half was installed on dev-box, in the runner account's <code>authorized_keys</code> with <code>restrict</code> and a forced command.</div></div>
         </div>
         <div>
           <h3 class="block-title">SSH alias (inside the Hermes container)</h3>
-          <div class="code">Host dev-box
+          <div class="code">Host now-verify
     HostName    &lt;dev-box static LAN IP&gt;
-    User        claude-verifier
-    IdentityFile &lt;per-agent state path&gt;/.ssh/dev-box_ed25519
+    User        &lt;runner account&gt;
+    IdentityFile &lt;per-agent state path&gt;/.ssh/&lt;runner key&gt;
     IdentitiesOnly yes
     UserKnownHostsFile &lt;per-agent state path&gt;/.ssh/known_hosts
     StrictHostKeyChecking yes</div>
         </div>
-        <p class="lead">Host&#8209;key verification is enforced, not skipped: dev-box's host key was captured via <code>ssh&#8209;keyscan</code> from <em>inside</em> the Hermes container (the exact path Hermes actually uses) and cross&#8209;checked byte&#8209;for&#8209;byte against the key dev-box itself presents, before being trusted. <code>StrictHostHostChecking no</code> is never configured.</p>
-        <div class="callout warn"><strong>Gotcha hit and fixed during setup:</strong> writing into the container's <code>.ssh</code> directory as the container's default (root) user creates root&#8209;owned files that the actual agent process &mdash; which runs as an unprivileged in&#8209;container user &mdash; cannot read. The symptom looks like a DNS failure (&ldquo;could not resolve hostname dev&#8209;box&rdquo;), not a permissions error, because SSH silently ignores a config file it can't open. Fix: always write as that unprivileged user, or <code>chown</code> the directory back to it afterward. Also noted in the <a href="agents-vm-runbook.html#failure-modes">Agents VM Runbook</a>'s failure modes.</div>
+        <p class="lead">Host&#8209;key verification is enforced, not skipped: the host key was captured from <em>inside</em> the Hermes container (the exact path Hermes uses) and cross&#8209;checked against the key dev&#8209;box itself presents before being trusted. Strict host&#8209;key checking is asserted by the runner's own tests.</p>
+        <div class="callout warn"><strong>Gotcha:</strong> writing into the container's <code>.ssh</code> directory as the container's default (root) user creates root&#8209;owned files that the unprivileged agent process cannot read. The symptom looks like a DNS failure (&ldquo;could not resolve hostname&rdquo;), not a permissions error. Always write as the agent's own user, or fix ownership afterwards.</div>
       </div>
     </div>
   </section>
 
-  <!-- ============ USER & DOCKER ============ -->
-  <section id="user-docker" class="host">
+  <!-- ============ ISOLATION ============ -->
+  <section id="isolation" class="host">
     <div class="panel">
       <div class="panel-head">
-        <div class="panel-head-left"><div><h2><code>claude-verifier</code> &amp; Docker</h2><div class="sub">Scoped authority, nothing that reaches off this box</div></div></div>
-        <span class="pill good"><span class="dot"></span>current</span>
+        <div class="panel-head-left"><div><h2>Per&#8209;run isolation</h2><div class="sub">Controls checked and recorded in every run's evidence</div></div></div>
+        <span class="pill good"><span class="dot"></span>verified 2026&#8209;09&#8209;20</span>
       </div>
       <div class="panel-body">
-        <div class="kv">
-          <div class="kv-item"><span class="qr-key">Login</span><span class="qr-val">key&#8209;only; password login locked</span></div>
-          <div class="kv-item"><span class="qr-key">Docker access</span><span class="qr-val">member of the <code>docker</code> group &mdash; no sudo needed, scoped to this VM only</span></div>
-          <div class="kv-item"><span class="qr-key">sudo</span><span class="qr-val">none</span></div>
-          <div class="kv-item"><span class="qr-key">Reach off this box</span><span class="qr-val">none &mdash; no SSH key to Proxmox or any other VM</span></div>
-        </div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>Component</th><th>Version</th></tr></thead>
+            <thead><tr><th>Control</th><th>State</th></tr></thead>
             <tbody>
-              <tr><td>Docker Engine</td><td class="dim">29.8.1, official apt repo (not the convenience script)</td></tr>
-              <tr><td>Docker Compose plugin</td><td class="dim">v5.5.1</td></tr>
+              <tr><td>Container type</td><td class="dim">unprivileged system container, isolated user/group ID map per run; the candidate runs as a non&#8209;root user with all capabilities dropped and no&#8209;new&#8209;privileges</td></tr>
+              <tr><td>Docker</td><td class="dim">the candidate's Docker daemon lives inside its own container; the host Docker socket is never reachable</td></tr>
+              <tr><td>Host access</td><td class="dim">no host paths, sockets or devices are passed in; effective profile is checked to contain only root disk and network</td></tr>
+              <tr><td>Confinement</td><td class="dim">AppArmor profile enforced per instance (label checked against an exact template); restricted Incus project per run</td></tr>
+              <tr><td>Network</td><td class="dim">internet&#8209;only egress; RFC1918, CGNAT and LAN ranges denied, so a candidate cannot reach the homelab</td></tr>
+              <tr><td>Resources &amp; time</td><td class="dim">memory, CPU, disk and process limits per run; wall&#8209;clock timeout (default 30 min, heavy apps up to 60 min) with hard kill</td></tr>
+              <tr><td>Output</td><td class="dim">stdout/stderr captured with a hard 64 MiB cap per stream; the stream is diagnostic only and never feeds the verdict</td></tr>
+              <tr><td>Teardown</td><td class="dim">every run is destroyed; the whole host is then compared with an idle baseline (containers, networks, volumes, users, groups, firewall, mounts, listeners, units) and any difference fails the run</td></tr>
+              <tr><td>Fail&#8209;closed marker</td><td class="dim">an unexpected state writes a marker and the supervisor refuses further work until an admin inspects it</td></tr>
+              <tr><td>Concurrency</td><td class="dim">exactly one run at a time (global lock); further requests queue in the runner</td></tr>
             </tbody>
           </table>
         </div>
-        <p class="lead">Only the local Unix socket is used &mdash; no remote Docker TCP API is exposed, authenticated or not.</p>
       </div>
     </div>
   </section>
 
-  <!-- ============ WORKSPACE ============ -->
-  <section id="workspace" class="host">
+  <!-- ============ CONTRACT ============ -->
+  <section id="contract" class="host">
     <div class="panel">
       <div class="panel-head">
-        <div class="panel-head-left"><div><h2>Verification workspace</h2><div class="sub">Every run is disposable; nothing here is a source of truth</div></div></div>
+        <div class="panel-head-left"><div><h2>Application contract</h2><div class="sub">What a repository provides to be verified</div></div></div>
       </div>
       <div class="panel-body">
-        <div class="code">/srv/prepr/runs/&lt;repo&gt;-&lt;short-sha&gt;-&lt;run-id&gt;/   <span class="c"># one dir per run</span>
-/srv/prepr/artifacts/                          <span class="c"># logs/screenshots worth keeping</span></div>
-        <p class="lead">Compose projects use <code>-p prepr-&lt;repo&gt;-&lt;shortsha&gt;-&lt;runid&gt;</code> so concurrent or successive runs never collide. Cleanup is <code>docker compose -p &lt;project&gt; down -v</code> from the run directory, then deleting the directory &mdash; no global Docker cleanup required, and unrelated resources are never touched.</p>
-        <div>
-          <h3 class="block-title">Candidate source transfer</h3>
-          <p class="lead" style="margin-bottom:10px;">No GitHub credentials live on dev-box. The exact candidate commit is packaged and streamed over the same SSH connection already in use:</p>
-          <div class="code">git archive &lt;candidate-sha&gt; | ssh dev-box 'mkdir -p &lt;run-dir&gt; &amp;&amp; tar -x -C &lt;run-dir&gt;'</div>
-        </div>
-        <div>
-          <h3 class="block-title">Temporary test secrets</h3>
-          <p class="lead">Dropped into a single run directory with <code>chmod 600</code>, deleted on cleanup. Production <code>.env</code> files are never copied wholesale, and no production credential is ever written to this box.</p>
-        </div>
+        <p class="lead">The repository tracks a manifest naming one relative script &mdash; no arguments, no shell:</p>
+        <div class="code">.prepr.json   {"command": "./scripts/verify-prepr.sh"}</div>
+        <p class="lead">The exact commit is archived by the runner (never <code>.git</code>, never credentials), unpacked at <code>/work/run</code> inside a fresh container, and the script runs there with <code>GIT_SHA</code>, <code>COMPOSE_PROJECT_NAME</code> and <code>CI=1</code>. Defaults: 2 GiB / 2 CPU / 10 GiB disk / 30 min; the two heaviest applications get 3 GiB / 2 CPU / 12 GiB / 60 min. Anything the script needs (Compose, Playwright, databases) runs inside that container.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LEGACY ============ -->
+  <section id="legacy" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Retired: direct&#8209;Docker access</h2><div class="sub">Why it was removed</div></div></div>
+        <span class="pill warn"><span class="dot"></span>removed 2026&#8209;09&#8209;20</span>
+      </div>
+      <div class="panel-body">
+        <p class="lead">The first version of this VM let the agent's SSH account run <code>docker</code> directly. Membership of the host <code>docker</code> group is equivalent to root on the VM, so candidate code could never be considered contained. That account was removed from the <code>docker</code> group once the isolated backend was live and proven; the old working directory and the direct path are unused and unreachable.</p>
+        <div class="callout"><strong>Change&#8209;control consequence:</strong> host users, groups and the Docker group are part of the supervisor's idle baseline. Any intentional change to them makes the next run fail closed until the baseline is deliberately re&#8209;captured &mdash; see the procedure in the <a href="dev-box-verification-runbook.html#baseline">Verification Backend Runbook</a>.</div>
       </div>
     </div>
   </section>
@@ -404,14 +426,37 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
             <thead><tr><th>Boundary</th><th>State</th></tr></thead>
             <tbody>
               <tr><td>Inbound firewall</td><td class="dim">default deny; SSH (22/tcp) allowed only from the homelab LAN &mdash; not internet&#8209;reachable, no port forwarded</td></tr>
+              <tr><td>Runner account</td><td class="dim">forced command only: no shell, no port forwarding, no agent forwarding, no PTY</td></tr>
               <tr><td>Production secrets on dev-box</td><td class="dim">none</td></tr>
-              <tr><td>Hermes GitHub token on dev-box</td><td class="dim">not copied</td></tr>
+              <tr><td>Hermes GitHub token on dev-box</td><td class="dim">not copied; only the exact commit archive is sent</td></tr>
+              <tr><td>Candidate container &rarr; homelab LAN</td><td class="dim">denied by firewall; internet only</td></tr>
               <tr><td>dev-box &rarr; Proxmox / PBS / Services VM</td><td class="dim">no SSH access</td></tr>
               <tr><td>dev-box &rarr; Agents VM Docker daemon</td><td class="dim">no access</td></tr>
-              <tr><td>Hermes containers &rarr; Agents VM Docker socket</td><td class="dim">not mounted &mdash; re&#8209;verified across every Hermes container while building this</td></tr>
+              <tr><td>Hermes containers &rarr; Agents VM Docker socket</td><td class="dim">not mounted &mdash; re&#8209;verified across every Hermes container</td></tr>
               <tr><td>Hermes containers, privileged mode</td><td class="dim">none, on any of them</td></tr>
-              <tr><td>Hermes model router</td><td class="dim">untouched by this work</td></tr>
-              <tr><td>Services VM production stacks</td><td class="dim">untouched by this work</td></tr>
+              <tr><td>Services VM production stacks</td><td class="dim">untouched</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RISKS ============ -->
+  <section id="risks" class="host">
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-head-left"><div><h2>Accepted risks</h2><div class="sub">Stated plainly, with the compensating controls</div></div></div>
+      </div>
+      <div class="panel-body">
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Risk</th><th>Compensation</th></tr></thead>
+            <tbody>
+              <tr><td>Shared kernel: a containers&#8209;level escape via a kernel vulnerability reaches the dev&#8209;box VM</td><td class="dim">the VM boundary is the last line: no production secrets, no route to Proxmox/PBS/Services; escape tests run on the isolation controls</td></tr>
+              <tr><td>Relaxed AppArmor for nested Docker (the container profile drops most <code>/proc/sys</code> and <code>/sys</code> denies)</td><td class="dim">unprivileged + isolated ID map, no host paths, restricted project, enforced label checked every run, internet&#8209;only firewall</td></tr>
+              <tr><td>Memory: heavy end&#8209;to&#8209;end stacks can be killed (exit 137)</td><td class="dim">runs fail visibly and clean up; do not resize the VM without checking host memory</td></tr>
+              <tr><td>Queued requests are held by the runner process, not a durable dispatcher</td><td class="dim">a killed waiting request must be re&#8209;run; every <em>accepted</em> run is journaled durably and cleaned up before the next one starts</td></tr>
             </tbody>
           </table>
         </div>
@@ -423,21 +468,26 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
   <section id="validation" class="host">
     <div class="panel">
       <div class="panel-head">
-        <div class="panel-head-left"><div><h2>End-to-end validation</h2><div class="sub">Tested through the real path, not from the admin box</div></div></div>
-        <span class="pill good"><span class="dot"></span>verified 2026&#8209;09&#8209;16</span>
+        <div class="panel-head-left"><div><h2>End&#8209;to&#8209;end validation</h2><div class="sub">Tested through the real path, from the Hermes container</div></div></div>
+        <span class="pill good"><span class="dot"></span>verified 2026&#8209;09&#8209;20</span>
       </div>
       <div class="panel-body">
-        <p class="lead">Every check below ran <em>from inside the Hermes container</em>, as the same unprivileged user the agent actually runs as &mdash; not from an admin session, which would only prove the human's own access works.</p>
+        <p class="lead">Every check ran <em>from inside the Hermes container</em>, as the unprivileged user the agent runs as &mdash; not from an admin session &mdash; against the installed runner and the real supervisor.</p>
         <div class="tbl-wrap">
           <table>
             <thead><tr><th>Check</th><th>Result</th></tr></thead>
             <tbody>
-              <tr><td>Hermes container &rarr; SSH to dev-box, identity check</td><td class="dim">PASS &mdash; resolves to <code>claude-verifier</code></td></tr>
-              <tr><td>Remote Docker Engine reachable &amp; working</td><td class="dim">PASS &mdash; 29.8.1</td></tr>
-              <tr><td>Remote Compose plugin reachable &amp; working</td><td class="dim">PASS &mdash; v5.5.1</td></tr>
-              <tr><td>Disposable test stack (HTTP service + dependent service): config, pull, start, healthcheck</td><td class="dim">PASS &mdash; both services healthy</td></tr>
-              <tr><td>Local reachability + log inspection from <code>claude-verifier</code></td><td class="dim">PASS &mdash; HTTP 200, logs readable</td></tr>
-              <tr><td>Teardown: containers, network, volumes removed</td><td class="dim">PASS &mdash; nothing left behind, no unrelated resources touched</td></tr>
+              <tr><td>Passing script</td><td class="dim">PASS &mdash; verdict from the supervisor's own evidence; host back to baseline</td></tr>
+              <tr><td>Script exits non&#8209;zero</td><td class="dim">FAIL with the real exit code; cleanup verified</td></tr>
+              <tr><td>Candidate prints a forged &ldquo;success&rdquo; result on stderr, then fails</td><td class="dim">FAIL &mdash; candidate output can never influence the verdict</td></tr>
+              <tr><td>Script sleeps past its timeout</td><td class="dim">FAIL, timed out and killed; cleanup verified</td></tr>
+              <tr><td>Nested <code>docker run</code> and <code>docker compose up</code></td><td class="dim">PASS &mdash; inner Docker works inside the container</td></tr>
+              <tr><td>Non&#8209;executable manifest command</td><td class="dim">FAIL locally before anything is submitted</td></tr>
+              <tr><td>100 MB single&#8209;line output flood</td><td class="dim">captured up to the 64 MiB cap; supervisor memory stays flat</td></tr>
+              <tr><td>Kill mid&#8209;run, kill during setup, supervisor <code>kill -9</code> mid&#8209;run</td><td class="dim">run ends cleaned/failed correctly; nothing invented; host back to baseline</td></tr>
+              <tr><td>Runner process killed mid&#8209;run</td><td class="dim">the next verification finds the journaled run, cleans it, then proceeds</td></tr>
+              <tr><td>Two verifications requested at once</td><td class="dim">serialized; a cancel of the first is recovered and the second runs</td></tr>
+              <tr><td>Real application (TidyNest, exact commit)</td><td class="dim">PASS with cleanup verified</td></tr>
             </tbody>
           </table>
         </div>
@@ -449,10 +499,21 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
   <section id="snapshot" class="host">
     <div class="panel">
       <div class="panel-head">
-        <div class="panel-head-left"><div><h2>Snapshot</h2><div class="sub">A known-clean restore point</div></div></div>
+        <div class="panel-head-left"><div><h2>Snapshots &amp; rollback</h2><div class="sub">Known&#8209;good restore points, most recent first</div></div></div>
       </div>
       <div class="panel-body">
-        <p class="lead">A Proxmox snapshot named <code>devbox&#8209;prepr&#8209;ready</code> was taken once the VM was fully configured and validated end&#8209;to&#8209;end &mdash; base OS, Docker, <code>claude-verifier</code>, workspace, firewall, all confirmed working. Roll back to it any time dev-box's disk state drifts from a clean baseline.</p>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>Snapshot</th><th>Taken</th></tr></thead>
+            <tbody>
+              <tr><td><code>devbox&#8209;pre&#8209;nowverifyd&#8209;v110</code></td><td class="dim">before the 1.1.0 supervisor was installed</td></tr>
+              <tr><td><code>devbox&#8209;pre&#8209;incus&#8209;lts606</code></td><td class="dim">before the Incus LTS upgrade</td></tr>
+              <tr><td><code>devbox&#8209;pre&#8209;now&#8209;verify</code></td><td class="dim">before the isolated backend was built</td></tr>
+              <tr><td><code>devbox&#8209;prepr&#8209;ready</code></td><td class="dim">the original direct&#8209;Docker VM, fully validated</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="lead" style="margin-top:12px;">Roll back with <code>qm rollback 103 &lt;snapshot&gt;</code> from the Proxmox host. A file&#8209;level backup of the previous supervisor and state is kept on the VM for the most specific rollback; see the <a href="dev-box-verification-runbook.html#rollback">Verification Backend Runbook</a>.</p>
       </div>
     </div>
   </section>
@@ -466,18 +527,20 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
       <div class="panel-body">
         <div class="kv">
           <div class="kv-item"><span class="qr-key">SSH (admin)</span><span class="qr-val">static LAN IP, personal key</span></div>
-          <div class="kv-item"><span class="qr-key">SSH (Hermes automation)</span><span class="qr-val">alias <code>dev-box</code>, dedicated key, host&#8209;key pinned</span></div>
+          <div class="kv-item"><span class="qr-key">SSH (Hermes runner)</span><span class="qr-val">alias <code>now-verify</code>, dedicated key, forced command, host&#8209;key pinned</span></div>
+          <div class="kv-item"><span class="qr-key">Health check</span><span class="qr-val"><code>ssh now-verify health</code> from the Hermes container</span></div>
           <div class="kv-item"><span class="qr-key">Internal runbook</span><span class="qr-val"><code>homelab-stacks</code> &rsaquo; <code>docs/DEV-BOX.md</code></span></div>
+          <div class="kv-item"><span class="qr-key">Operations</span><span class="qr-val"><a href="dev-box-verification-runbook.html">Verification Backend Runbook</a></span></div>
           <div class="kv-item"><span class="qr-key">Autostart on host reboot</span><span class="qr-val">off &mdash; start manually</span></div>
         </div>
-        <div class="callout"><strong>Known limitations:</strong> RAM is tighter than the original target due to current host memory pressure (see the <a href="homelab-runbook.html#host-pve01">Home Lab Runbook</a>); Tailscale was deliberately skipped since plain LAN reachability from Hermes was verified and sufficient; dev-box does not auto&#8209;start after a host reboot.</div>
+        <div class="callout"><strong>Known limitations:</strong> RAM is tighter than the original target due to host memory pressure (see the <a href="homelab-runbook.html#host-pve01">Home Lab Runbook</a>); Tailscale was deliberately skipped since plain LAN reachability from Hermes is sufficient; dev&#8209;box does not auto&#8209;start after a hypervisor reboot; verifications run one at a time.</div>
       </div>
     </div>
   </section>
 
   <footer>
-    <span>Dev-Box Runbook &middot; disposable by design</span>
-    <span><a href="homelab-runbook.html">Home Lab Runbook</a> &middot; <a href="agents-vm-runbook.html">Agents VM Runbook</a></span>
+    <span>Dev-Box Runbook &middot; isolated by design</span>
+    <span><a href="dev-box-verification-runbook.html">Verification Backend Runbook</a> &middot; <a href="homelab-runbook.html">Home Lab Runbook</a> &middot; <a href="agents-vm-runbook.html">Agents VM Runbook</a></span>
   </footer>
 
 </div>

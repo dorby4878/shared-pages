@@ -799,12 +799,25 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
   <section id="external-access" class="host">
     <div class="panel">
       <div class="panel-head">
-        <div class="panel-head-left"><div><h2>Outbound access to dev-box</h2><div class="sub">One new capability, added 2026&#8209;09&#8209;16, that doesn't loosen anything else</div></div></div>
+        <div class="panel-head-left"><div><h2>Outbound access to dev-box &amp; the pre&#8209;PR audit gate</h2><div class="sub">One narrow outbound capability, and the audit every change passes before a pull request</div></div></div>
         <span class="pill good"><span class="dot"></span>current</span>
       </div>
       <div class="panel-body">
-        <p class="lead">hermes&#8209;1's inner Claude Code can now open an outbound SSH connection to a separate, disposable sandbox VM (<a href="dev-box-runbook.html">dev-box</a>, VMID 103) to run full application stacks for pre&#8209;PR verification. The dedicated keypair lives inside hermes&#8209;1's own <code>&lt;per-agent state path&gt;/.ssh/</code> &mdash; the same isolated, persistent location described above &mdash; and never leaves it; only its public half was installed on the remote side.</p>
+        <p class="lead">hermes&#8209;1's runner can open an outbound SSH connection to a separate, isolated verification VM (<a href="dev-box-runbook.html">dev-box</a>, VMID 103) to run full application stacks for pre&#8209;PR verification. The dedicated keypair lives inside hermes&#8209;1's own <code>&lt;per-agent state path&gt;/.ssh/</code> &mdash; the same isolated, persistent location described above &mdash; and never leaves it; only its public half was installed on the remote side, bound to a forced command (no shell, no Docker access). Candidate code runs only inside a fresh unprivileged container per run.</p>
         <p class="lead" style="margin-top:10px;">Nothing about hermes&#8209;1's own isolation changed to enable this: still no <code>/var/run/docker.sock</code> mount from the Agents VM (re&#8209;verified across all four Hermes containers as part of this change), still not privileged, and the <a href="#model-router">model router</a> was untouched. This is an outbound&#8209;only capability &mdash; nothing new can reach into hermes&#8209;1 as a result of it.</p>
+        <h3 class="block-title" style="margin-top:18px;">The pre&#8209;PR audit gate</h3>
+        <p class="lead">Every change to a locally provisionable application passes the same audit before a pull request is opened, in the <code>coder-specialist</code> skill's flow. The verdict is computed by trusted code, never by an agent's own report.</p>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>Step</th><th>What is checked</th></tr></thead>
+          <tbody>
+            <tr><td>1 &middot; Candidate commit</td><td class="dim">an exact 40&#8209;character commit SHA; the working tree is never used</td></tr>
+            <tr><td>2 &middot; Independent review</td><td class="dim">risk&#8209;tiered plan and final reviews by a separate reviewer before the gate (existing tier rules unchanged)</td></tr>
+            <tr><td>3 &middot; Isolated verification</td><td class="dim">the runner archives the exact commit, submits it to dev&#8209;box, and judges only the supervisor's own status and evidence; candidate output and the SSH exit code never influence the verdict. PASS needs exit code 0, clean teardown, host back to baseline, and the full isolation attestation</td></tr>
+            <tr><td>4 &middot; Fresh re&#8209;check</td><td class="dim">immediately before the PR is created, the precondition command runs the verification again for the same SHA and reads back its evidence; stored evidence is an audit record, not authorization</td></tr>
+            <tr><td>5 &middot; Pull request</td><td class="dim">feature branch and PR only; merging stays a human decision</td></tr>
+          </tbody>
+        </table></div>
+        <div class="callout" style="margin-top:14px;"><strong>Procedural, stated plainly:</strong> &ldquo;no PR before PASS&rdquo; is a rule the orchestrating agent follows; no gateway hook or git hook enforces it mechanically. Verifications run as background jobs (a run can take up to an hour) and queue one at a time. Operations and incident handling: <a href="dev-box-verification-runbook.html">Verification Backend Runbook</a>.</div>
       </div>
     </div>
   </section>

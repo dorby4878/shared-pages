@@ -293,7 +293,7 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
     <p class="eyebrow">Infrastructure reference &mdash; live-scanned</p>
     <h1 class="title">One NUC, three VMs, and what's actually running on them</h1>
     <p class="hero-sub">Physical layer, per-VM configuration, backup topology, and the open cleanup items &mdash; assembled by SSHing into every host rather than from notes.</p>
-    <div class="scan-time"><span class="dot"></span>Scanned 2026&#8209;09&#8209;05 &middot; services section refreshed 2026&#8209;09&#8209;06 &middot; agents section refreshed 2026&#8209;09&#8209;09 (deep architecture moved to the <a href="agents-vm-runbook.html">Agents VM Runbook</a>) &middot; dev-box (VMID 103) added 2026&#8209;09&#8209;16, now 4 hosts online, 0 unreachable (deep reference: <a href="dev-box-runbook.html">Dev-Box Runbook</a>)</div>
+    <div class="scan-time"><span class="dot"></span>Scanned 2026&#8209;09&#8209;05 &middot; services section refreshed 2026&#8209;09&#8209;06 &middot; agents section refreshed 2026&#8209;09&#8209;09 (deep architecture moved to the <a href="agents-vm-runbook.html">Agents VM Runbook</a>) &middot; dev-box (VMID 103) added 2026&#8209;09&#8209;16, isolated verification backend 2026&#8209;09&#8209;20, now 4 hosts online, 0 unreachable (deep reference: <a href="dev-box-runbook.html">Dev-Box Runbook</a>)</div>
   </header>
 
   <section id="topology" class="topo">
@@ -327,7 +327,7 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
         <div class="topo-node">
           <div class="vmid">VMID 103</div>
           <div class="name">dev-box</div>
-          <div class="role">Disposable Docker/Compose sandbox</div>
+          <div class="role">Isolated pre&#8209;PR verification host</div>
           <div class="ip">static LAN IP &middot; key-based SSH, LAN&#8209;scoped only</div>
         </div>
       </div>
@@ -586,14 +586,14 @@ footer{margin-top:64px; padding-top:22px; border-top:1px solid var(--line); colo
       <div class="panel-body">
 
         <div class="kv">
-          <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">Disposable Docker/Compose sandbox for the Claude Code instance inside a Hermes container to run pre&#8209;PR application verification</span></div>
+          <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">Isolated pre&#8209;PR verification backend: every run of an exact commit executes in its own unprivileged container (own Docker daemon, own network), one run at a time</span></div>
           <div class="kv-item"><span class="qr-key">Resources</span><span class="qr-val">2 cores &middot; 4 GiB RAM (balloon min 2 GiB) &middot; 60 GB disk, thin&#8209;provisioned</span></div>
           <div class="kv-item"><span class="qr-key">Autostart</span><span class="qr-val">off &mdash; started on demand</span></div>
         </div>
 
-        <p style="font-size:13.5px; color:var(--ink-soft); max-width:70ch;">Reached only over the homelab LAN via a dedicated SSH identity generated inside the Hermes container's own persistent state (never printed, host&#8209;key pinned) &mdash; not by Tailscale, not by any credential shared with production. The <code>claude&#8209;verifier</code> account on dev-box can run Docker/Compose freely (that authority is scoped to this one disposable VM) but has no path back into Proxmox, the Services VM, or the Agents VM's own Docker daemon. Full architecture, access design, and end&#8209;to&#8209;end validation results: <a href="dev-box-runbook.html">Dev-Box Runbook</a>.</p>
+        <p style="font-size:13.5px; color:var(--ink-soft); max-width:70ch;">Reached only over the homelab LAN via a dedicated SSH identity generated inside the Hermes container's own persistent state (never printed, host&#8209;key pinned) &mdash; not by Tailscale, not by any credential shared with production. That identity is bound to a forced command: it can submit an exact commit archive and read the result, nothing else &mdash; no shell, no Docker access. Candidate code runs only inside a per&#8209;run unprivileged container driven by a root supervisor, and has no path back into Proxmox, the Services VM, the homelab LAN, or the Agents VM's own Docker daemon. Full architecture, access design, and end&#8209;to&#8209;end validation results: <a href="dev-box-runbook.html">Dev-Box Runbook</a>.</p>
 
-        <div class="callout good"><strong>Verified end&#8209;to&#8209;end from inside the Hermes container itself</strong> (not just from an admin session): SSH identity resolves correctly, remote Docker and Compose both work, a disposable test stack builds/starts/passes healthchecks/is reachable/logs are readable, and teardown removes every resource it created and nothing else.</div>
+        <div class="callout good"><strong>Verified end&#8209;to&#8209;end from inside the Hermes container itself</strong> (2026&#8209;09&#8209;20, not just from an admin session): passing, failing, forged&#8209;output, timeout and nested&#8209;Docker runs all give the correct verdict; a run killed mid&#8209;flight is cleaned up by the next one; and after every run the host is back to its idle baseline.</div>
 
       </div>
     </div>
