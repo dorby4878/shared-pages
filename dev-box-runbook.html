@@ -267,7 +267,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
     <p class="hero-sub">dev-box is the isolated host where the Hermes agents verify application changes before a pull request: integration and end&#8209;to&#8209;end tests of an exact commit, several applications queued, each run in a fresh unprivileged container with its own Docker daemon and network &mdash; without touching the Agents VM, Hermes, the knowledge layer, or the Services VM's production workloads.</p>
     <div class="scan-time">
       <span class="dot" aria-hidden="true"></span>
-      <span><strong>Source of truth / last verified:</strong> isolated backend installed and proven 2026&#8209;09&#8209;20. Full internal runbook: <code>homelab-stacks</code> &rsaquo; <code>docs/DEV-BOX.md</code>. Day&#8209;2 operations and incident handling are in the sections from <a href="#health">Health checks</a> onward. Treat conflicts in favor of re&#8209;checking that repo and the live VM, not this page.</span>
+      <span><strong>Source of truth / last verified:</strong> isolated backend installed and proven 2026&#8209;09&#8209;20; verification contract v2 (supervisor 2.0) deployed and accepted 2026&#8209;09&#8209;24. Contract source: <code>homelab-stacks</code> &rsaquo; <code>dev-box/now-verify</code>. Full internal runbook: <code>homelab-stacks</code> &rsaquo; <code>docs/DEV-BOX.md</code>. Day&#8209;2 operations and incident handling are in the sections from <a href="#health">Health checks</a> onward. Treat conflicts in favor of re&#8209;checking that repo and the live VM, not this page.</span>
     </div>
   </header>
 
@@ -290,7 +290,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
           <div class="kv-item"><span class="qr-key">Network</span><span class="qr-val">static LAN IP &middot; SSH only, LAN&#8209;scoped</span></div>
           <div class="kv-item"><span class="qr-key">Role</span><span class="qr-val">Isolated pre&#8209;PR verification backend (one run at a time)</span></div>
           <div class="kv-item"><span class="qr-key">Container runtime</span><span class="qr-val">Incus 6.0 LTS, unprivileged system containers</span></div>
-          <div class="kv-item"><span class="qr-key">Supervisor</span><span class="qr-val"><code>now-verifyd</code> 1.1.0 (root, systemd)</span></div>
+          <div class="kv-item"><span class="qr-key">Supervisor</span><span class="qr-val"><code>now-verifyd</code> 2.0 (root, systemd; verification contract v2)</span></div>
           <div class="kv-item"><span class="qr-key">Autostart</span><span class="qr-val">off &mdash; started on demand</span></div>
         </div>
         <div class="callout warn"><strong>Sized below the original 6&ndash;8 GiB target.</strong> The hypervisor had very little free physical RAM when this VM was added (see the <a href="homelab-runbook.html#host-pve01">Home Lab Runbook</a>'s pve01 section). Heavy end&#8209;to&#8209;end stacks (database + browser tests) can still be killed for memory (exit 137). Do not resize the VM without checking the host's free memory first.</div>
@@ -324,7 +324,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
           <table>
             <thead><tr><th>Component</th><th>Where / what</th></tr></thead>
             <tbody>
-              <tr><td>Supervisor <code>now-verifyd</code></td><td class="dim">root systemd service on dev-box; unix socket API; validates archives, drives Incus, enforces the global lock, tears every run down and diffs the host against its idle baseline</td></tr>
+              <tr><td>Supervisor <code>now-verifyd</code></td><td class="dim">root systemd service on dev-box; unix socket API; validates archives, drives Incus, enforces the global lock, tears every run down, then evaluates the host in three separate categories (security findings, cleanup findings, runtime observations) against a versioned policy and a pinned idle baseline</td></tr>
               <tr><td>Client <code>now-verifyctl</code> + SSH gate</td><td class="dim">unprivileged client; a forced&#8209;command script maps the fixed operations to fixed client arguments (no shell, no forwarding)</td></tr>
               <tr><td>Golden image</td><td class="dim">Ubuntu 24.04 with Docker Engine and the Compose plugin, a non&#8209;root <code>candidate</code> user; its fingerprint is pinned and checked before every run</td></tr>
               <tr><td>Storage / network</td><td class="dim">dedicated btrfs pool, dedicated bridge, nftables + UFW rules tagged for this system</td></tr>
@@ -382,8 +382,8 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
               <tr><td>Network</td><td class="dim">internet&#8209;only egress; RFC1918, CGNAT and LAN ranges denied, so a candidate cannot reach the homelab</td></tr>
               <tr><td>Resources &amp; time</td><td class="dim">memory, CPU, disk and process limits per run; wall&#8209;clock timeout (default 30 min, heavy apps up to 60 min) with hard kill</td></tr>
               <tr><td>Output</td><td class="dim">stdout/stderr captured with a hard 64 MiB cap per stream; the stream is diagnostic only and never feeds the verdict</td></tr>
-              <tr><td>Teardown</td><td class="dim">every run is destroyed; the whole host is then compared with an idle baseline (containers, networks, volumes, users, groups, firewall, mounts, listeners, units) and any difference fails the run</td></tr>
-              <tr><td>Fail&#8209;closed marker</td><td class="dim">an unexpected state writes a marker and the supervisor refuses further work until an admin inspects it</td></tr>
+              <tr><td>Teardown</td><td class="dim">every run is destroyed with ownership proof; the host is then evaluated: <strong>security findings</strong> (firewall, accounts, mounts, listeners, unknown or unverifiable service activity) and <strong>cleanup findings</strong> (anything the run left behind) fail the run; approved background activity whose package provenance verifies is only recorded as an observation</td></tr>
+              <tr><td>Quarantine</td><td class="dim">a blocking finding opens an incident (never overwritten by later failures); cleanup incidents get bounded automatic recovery by the supervisor itself, security and integrity incidents wait for an admin, who must re&#8209;evaluate before clearing</td></tr>
               <tr><td>Concurrency</td><td class="dim">exactly one run at a time (global lock); further requests queue in the runner</td></tr>
             </tbody>
           </table>
@@ -415,7 +415,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
       </div>
       <div class="panel-body">
         <p class="lead">The first version of this VM let the agent's SSH account run <code>docker</code> directly. Membership of the host <code>docker</code> group is equivalent to root on the VM, so candidate code could never be considered contained. That account was removed from the <code>docker</code> group once the isolated backend was live and proven; the old working directory and the direct path are unused and unreachable.</p>
-        <div class="callout"><strong>Change&#8209;control consequence:</strong> host users, groups and the Docker group are part of the supervisor's idle baseline. Any intentional change to them makes the next run fail closed until the baseline is deliberately re&#8209;captured &mdash; see the procedure in the <a href="#baseline">Changing the host: the idle baseline</a>.</div>
+        <div class="callout"><strong>Change&#8209;control consequence:</strong> host users, groups, the Docker group, firewall rules, mounts and listeners are protected state. An intentional change must go through the drained maintenance window and a reviewed, per&#8209;key baseline update &mdash; see <a href="#baseline">Changing the host</a>.</div>
       </div>
     </div>
   </section>
@@ -483,14 +483,14 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
           <table>
             <thead><tr><th>Check</th><th>Result</th></tr></thead>
             <tbody>
-              <tr><td>Passing script</td><td class="dim">PASS &mdash; verdict from the supervisor's own evidence; host back to baseline</td></tr>
+              <tr><td>Passing script</td><td class="dim">PASS &mdash; verdict from the supervisor's own evidence; no security or cleanup findings</td></tr>
               <tr><td>Script exits non&#8209;zero</td><td class="dim">FAIL with the real exit code; cleanup verified</td></tr>
               <tr><td>Candidate prints a forged &ldquo;success&rdquo; result on stderr, then fails</td><td class="dim">FAIL &mdash; candidate output can never influence the verdict</td></tr>
               <tr><td>Script sleeps past its timeout</td><td class="dim">FAIL, timed out and killed; cleanup verified</td></tr>
               <tr><td>Nested <code>docker run</code> and <code>docker compose up</code></td><td class="dim">PASS &mdash; inner Docker works inside the container</td></tr>
               <tr><td>Non&#8209;executable manifest command</td><td class="dim">FAIL locally before anything is submitted</td></tr>
               <tr><td>100 MB single&#8209;line output flood</td><td class="dim">captured up to the 64 MiB cap; supervisor memory stays flat</td></tr>
-              <tr><td>Kill mid&#8209;run, kill during setup, supervisor <code>kill -9</code> mid&#8209;run</td><td class="dim">run ends cleaned/failed correctly; nothing invented; host back to baseline</td></tr>
+              <tr><td>Kill mid&#8209;run, kill during setup, supervisor <code>kill -9</code> mid&#8209;run</td><td class="dim">run ends cleaned/failed correctly; nothing invented; worker ready again without an admin</td></tr>
               <tr><td>Runner process killed mid&#8209;run</td><td class="dim">the next verification finds the journaled run, cleans it, then proceeds</td></tr>
               <tr><td>Two verifications requested at once</td><td class="dim">serialized; a cancel of the first is recovered and the second runs</td></tr>
               <tr><td>Real application (TidyNest, exact commit)</td><td class="dim">PASS with cleanup verified</td></tr>
@@ -509,12 +509,12 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
       </div>
       <div class="panel-body">
         <div class="steps">
-          <div class="step"><div class="num">01</div><div class="txt"><strong>From the Hermes container</strong> (the real path): the health operation must report the pinned supervisor version, no fail&#8209;closed marker, and exactly the fourteen frozen checks all ok.</div></div>
-          <div class="step"><div class="num">02</div><div class="txt"><strong>On dev&#8209;box, idle host</strong>: the supervisor's inventory must equal the idle baseline (containers, networks, volumes, users, groups, firewall, mounts, listeners, units) and no per&#8209;run Incus instance may exist.</div></div>
+          <div class="step"><div class="num">01</div><div class="txt"><strong>From the Hermes container</strong> (the real path): the health operation always answers; it must report the pinned supervisor version, <code>worker_state ready</code>, and exactly the nineteen frozen protected checks all ok. Any other state comes with an explicit reason code (busy, maintenance, recovering, quarantined + incident id).</div></div>
+          <div class="step"><div class="num">02</div><div class="txt"><strong>On dev&#8209;box</strong>: the admin evaluation must show no security and no cleanup findings (observations are fine) and no per&#8209;run Incus instance may exist.</div></div>
           <div class="step"><div class="num">03</div><div class="txt"><strong>Service log</strong>: <code>journalctl -u now-verifyd</code> shows a clean start and no repeated &ldquo;ADMIN ALERT&rdquo; lines.</div></div>
         </div>
         <div class="code">ssh now-verify health                                   <span class="c"># from the Hermes container</span>
-now-verifyctl inventory                                 <span class="c"># on dev-box, compare with the idle baseline</span>
+now-verify-admin evaluate                               <span class="c"># on dev-box: protected checks + security / cleanup / observations</span>
 incus list --all-projects                               <span class="c"># must be empty when idle</span>
 journalctl -u now-verifyd -n 50 --no-pager</div>
       </div>
@@ -538,7 +538,7 @@ journalctl -u now-verifyd -n 50 --no-pager</div>
             </tbody>
           </table>
         </div>
-        <div class="callout warn" style="margin-top:14px;"><strong>Always run verification as a background job.</strong> A run can take up to an hour; a foreground terminal call is cut off after a few minutes. Requests for several applications queue on the runner and execute one at a time. Avoid restarting the Hermes container while a verification is running.</div>
+        <div class="callout warn" style="margin-top:14px;"><strong>Use the durable job wrapper.</strong> A run can take up to an hour; a foreground terminal call is cut off after a few minutes. The job wrapper starts the verification detached, returns a job id at once, and is polled with a bounded wait; asking again for the same candidate returns the same job instead of a second run. If a connection or tool call is lost, the runner resolves that same run by its identity instead of killing it or running the candidate again. Only infrastructure failures that the supervisor itself classifies as retry&#8209;eligible are retried (at most twice, fresh run id, identical archive); a failing test is never retried.</div>
         <div class="tbl-wrap" style="margin-top:14px;">
           <table>
             <thead><tr><th>Exit code</th><th>Meaning</th></tr></thead>
@@ -570,8 +570,8 @@ journalctl -u now-verifyd -n 50 --no-pager</div>
               <tr><td>Archive size, digest and manifest recomputed locally equal what the supervisor stored</td><td class="dim">the verified bytes are the sent bytes</td></tr>
               <tr><td>Launch recorded with the exact expected command, resources, timeout and Compose project</td><td class="dim">the run was configured as requested</td></tr>
               <tr><td>Candidate exit code 0; no timeout, kill, refusal or error</td><td class="dim">the script itself succeeded</td></tr>
-              <tr><td>Run container destroyed, host equals the idle baseline, zero remaining processes</td><td class="dim">clean teardown</td></tr>
-              <tr><td>Isolation attestation: fourteen preflight and seven per&#8209;instance checks, AppArmor label, ID map</td><td class="dim">the run really was contained</td></tr>
+              <tr><td>Run container destroyed, no security findings, no cleanup findings, zero remaining processes, supervisor classification &ldquo;passed&rdquo;</td><td class="dim">clean teardown; the record never claims the host was &ldquo;unchanged&rdquo;</td></tr>
+              <tr><td>Isolation attestation: nineteen protected checks, seven per&#8209;instance checks, AppArmor label, ID map; the execution image and security&#8209;policy generation seen at health time</td><td class="dim">the run really was contained, on the verifier that was checked</td></tr>
             </tbody>
           </table>
         </div>
@@ -591,7 +591,7 @@ journalctl -u now-verifyd -n 50 --no-pager</div>
           <table>
             <thead><tr><th>Symptom</th><th>Meaning</th><th>Response</th></tr></thead>
             <tbody>
-              <tr><td>Health reports the fail&#8209;closed marker, all runs refused</td><td class="dim">the supervisor saw something it did not expect (usually a baseline difference or a corrupt run record)</td><td class="dim">read the marker's message on dev&#8209;box; fix or explain the cause; only then follow <a href="#baseline">the baseline procedure</a> if it was an intentional host change</td></tr>
+              <tr><td>Health reports <code>quarantined</code> with an incident</td><td class="dim">a security or integrity finding, or cleanup that could not be proven; the incident names the reason, the originating run and the first&#8209;failure time</td><td class="dim">cleanup incidents recover by themselves (bounded); otherwise read the incident on dev&#8209;box, fix or explain the cause, then resolve it with the admin tool, which re&#8209;evaluates first. Never delete state files.</td></tr>
               <tr><td>&ldquo;busy: another run is active&rdquo;</td><td class="dim">the global lock is held</td><td class="dim">expected under queueing; the runner waits and retries; nothing to do</td></tr>
               <tr><td>&ldquo;busy: submit quota&rdquo;</td><td class="dim">four outstanding submissions</td><td class="dim">clean up abandoned submissions or wait for the reaper (one hour)</td></tr>
               <tr><td>Exit 137 in the candidate</td><td class="dim">killed for memory</td><td class="dim">reduce the stack or run it alone; do not resize the VM blindly</td></tr>
@@ -623,18 +623,18 @@ journalctl -u now-verifyd -n 50 --no-pager</div>
   <section id="baseline" class="host">
     <div class="panel">
       <div class="panel-head">
-        <div class="panel-head-left"><div><h2>Changing the host: the idle baseline</h2><div class="sub">Users, groups and the Docker group are part of it</div></div></div>
+        <div class="panel-head-left"><div><h2>Changing the host</h2><div class="sub">Maintenance window, then a reviewed per&#8209;key baseline update</div></div></div>
         <span class="pill warn"><span class="dot"></span>change control</span>
       </div>
       <div class="panel-body">
-        <p class="lead">After every run the supervisor compares the whole host with an idle baseline that includes the account, group and subordinate&#8209;ID file hashes and the Docker group membership. An intentional change to any of those &mdash; for example removing an account from the Docker group &mdash; therefore makes the next run fail closed until the baseline is deliberately re&#8209;captured. This happened once, for real, when the retired direct&#8209;Docker account was removed.</p>
+        <p class="lead">Protected state (accounts, groups, Docker group, firewall, mounts, listeners, non&#8209;run Incus objects) is compared with a pinned baseline. Ordinary Ubuntu background activity is not: it is classified against a versioned policy and verified against its package. An intentional change to protected state therefore needs a deliberate update.</p>
         <div class="steps">
-          <div class="step"><div class="num">01</div><div class="txt">Make sure no run is active and <code>incus list --all-projects</code> is empty.</div></div>
-          <div class="step"><div class="num">02</div><div class="txt">Capture the current inventory and compare it with the baseline: <strong>the only differing keys must be the ones you changed on purpose.</strong> Anything else is an incident, not a baseline update.</div></div>
-          <div class="step"><div class="num">03</div><div class="txt">Back up the baseline file, update just those keys, remove the fail&#8209;closed marker, restart the supervisor.</div></div>
-          <div class="step"><div class="num">04</div><div class="txt">Verify: health all ok, inventory identical to the new baseline, a fixture run passes.</div></div>
+          <div class="step"><div class="num">01</div><div class="txt">Open a drained maintenance window (admissions pause, an active run finishes first) and make the change inside it.</div></div>
+          <div class="step"><div class="num">02</div><div class="txt">Compare with the baseline: <strong>the only differing keys must be the ones you changed on purpose.</strong> Anything else is an incident, not a baseline update.</div></div>
+          <div class="step"><div class="num">03</div><div class="txt">Update just those keys with the admin tool (it backs up the old baseline and logs the change and the reason).</div></div>
+          <div class="step"><div class="num">04</div><div class="txt">Verify: health ready with all checks ok, admin evaluation clean, a fixture run passes.</div></div>
         </div>
-        <div class="callout warn" style="margin-top:14px;"><strong>Never re&#8209;capture the baseline to silence an unexplained difference.</strong> The baseline is the reference the whole isolation claim rests on.</div>
+        <div class="callout warn" style="margin-top:14px;"><strong>Never re&#8209;capture the whole baseline to silence an unexplained difference.</strong> Doing exactly that once adopted two orphaned network interfaces into the old baseline, which a later reboot exposed.</div>
       </div>
     </div>
   </section>
@@ -651,6 +651,7 @@ journalctl -u now-verifyd -n 50 --no-pager</div>
           <table>
             <thead><tr><th>Snapshot</th><th>Taken</th></tr></thead>
             <tbody>
+              <tr><td><code>devbox&#8209;pre&#8209;nowverifyd&#8209;v200</code></td><td class="dim">before the 2.0 supervisor (contract v2) was installed</td></tr>
               <tr><td><code>devbox&#8209;pre&#8209;nowverifyd&#8209;v110</code></td><td class="dim">before the 1.1.0 supervisor was installed</td></tr>
               <tr><td><code>devbox&#8209;pre&#8209;incus&#8209;lts606</code></td><td class="dim">before the Incus LTS upgrade</td></tr>
               <tr><td><code>devbox&#8209;pre&#8209;now&#8209;verify</code></td><td class="dim">before the isolated backend was built</td></tr>
