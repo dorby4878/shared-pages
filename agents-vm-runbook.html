@@ -817,7 +817,7 @@ footer{margin-top:60px; padding-top:22px; border-top:1px solid var(--line); colo
             <tr><td>5 &middot; Pull request</td><td class="dim">feature branch and PR only; merging stays a human decision</td></tr>
           </tbody>
         </table></div>
-        <div class="callout" style="margin-top:14px;"><strong>Procedural, stated plainly:</strong> &ldquo;no PR before PASS&rdquo; is a rule the orchestrating agent follows; no gateway hook or git hook enforces it mechanically. Verifications run as background jobs (a run can take up to an hour) and queue one at a time. Operations and incident handling: the <a href="dev-box-runbook.html#health">Dev&#8209;Box Runbook</a>.</div>
+        <div class="callout" style="margin-top:14px;"><strong>Procedural, stated plainly:</strong> &ldquo;no PR before PASS&rdquo; is a rule the orchestrating agent follows; no gateway hook or git hook enforces it mechanically. Verifications run as durable detached jobs (a run can take up to an hour; a tool timeout never loses or duplicates one) and queue one at a time. The runner distinguishes &ldquo;the candidate failed&rdquo; from &ldquo;the verifier could not decide&rdquo; (busy, maintenance, quarantined with a named incident) and retries only supervisor&#8209;classified infrastructure failures, at most twice. The now&#8209;verify client files in the skill are owned by the dev&#8209;box source repository and installed by the admin; the agent owns the rest of its workflow. Operations and incident handling: the <a href="dev-box-runbook.html#health">Dev&#8209;Box Runbook</a>.</div>
       </div>
     </div>
   </section>
